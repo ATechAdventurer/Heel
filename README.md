@@ -24,7 +24,7 @@ Android 8.0+ on an **ARM64** phone is required. Heel exposes vibration channels 
 
 ## Get started
 
-1. [Build the Android app](android/README.md), or use an APK explicitly provided by the maintainer. Install the **same APK on both phones**. This repository does not contain signing keys or APK binaries.
+1. **[Download Heel 0.9.2 Beta](https://github.com/sshado/Heel/releases/tag/v0.9.2-beta)** and install `Heel-v0.9.2-beta.apk` on **both phones**. Android may ask you to allow installation from your browser or file manager. You can also [build the app yourself](android/README.md). Release downloads contain the APK; signing keys are never published.
 2. [Set up a relay](relay/README.md). On a fresh Ubuntu VPS with a domain pointing at it, the installer handles Docker, the relay, HTTPS and a private setup code.
 3. Open Heel on each phone and choose Owner or Pet. Tap **Set relay address**, enter the same `https://relay.your-domain.example` address, then enter the host's phone setup code.
 4. The Owner creates an invitation; the Pet enters that invitation code. Compare the confirmation number and approve the pair.
