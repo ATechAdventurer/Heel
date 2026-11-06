@@ -1,0 +1,86 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'dev.prototype.lovense'
+    compileSdk 35
+    ndkVersion '27.2.12479018'
+    defaultConfig {
+        applicationId 'dev.prototype.lovense'
+        minSdk 26
+        targetSdk 35
+        versionCode 17
+        versionName '0.9.2'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    testOptions {
+        unitTests.includeAndroidResources = true
+        unitTests.all {
+            maxHeapSize = '768m'
+            maxParallelForks = 1
+            // Keep downloaded Android test runtimes and lock files inside this project.
+            systemProperty 'user.home', rootProject.file('.gradle/robolectric-home').absolutePath
+            systemProperty 'maven.repo.local', rootProject.file('.gradle/robolectric-cache').absolutePath
+            systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+            doFirst { rootProject.file('.gradle/robolectric-home').mkdirs() }
+            jvmArgs '--add-opens=java.base/java.lang=ALL-UNNAMED',
+                    '--add-opens=java.base/java.util=ALL-UNNAMED',
+                    '--add-opens=java.base/java.io=ALL-UNNAMED',
+                    '--add-opens=java.base/java.net=ALL-UNNAMED',
+                    '--add-opens=java.base/java.security=ALL-UNNAMED',
+                    '--add-opens=java.base/java.text=ALL-UNNAMED',
+                    '--add-opens=java.base/jdk.internal.access=ALL-UNNAMED',
+                    '--add-opens=java.desktop/java.awt.font=ALL-UNNAMED',
+                    '--add-opens=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED'
+        }
+    }
+    sourceSets.main.java.srcDirs += ['../vendor/btleplug/java', '../vendor/jni-utils/java']
+    sourceSets.main.assets.srcDir layout.buildDirectory.dir('generated/licenseAssets')
+    buildTypes {
+        debug { debuggable true }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    // Keep the debug signing key inside the project rather than the user's home.
+    signingConfigs.debug.storeFile = rootProject.file('.gradle/debug.keystore')
+}
+
+dependencies {
+    implementation 'com.squareup.okhttp3:okhttp:5.1.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.17'
+}
+
+def nativeBuild = tasks.register('buildNative', Exec) {
+    workingDir rootProject.file('native')
+    doFirst { environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath }
+    commandLine 'cargo', 'ndk', '-t', 'arm64-v8a', '-p', '26',
+            '-o', '../app/src/main/jniLibs', 'build', '--release', '--locked'
+    inputs.files(fileTree('../native') { exclude 'target/**' })
+    outputs.file('src/main/jniLibs/arm64-v8a/liblovense_native.so')
+}
+def debugKeystore = tasks.register('createDebugKeystore', Exec) {
+    def key = rootProject.file('.gradle/debug.keystore')
+    onlyIf { !key.exists() }
+    doFirst { key.parentFile.mkdirs() }
+    def executable = new File(System.getProperty('java.home'),
+        'bin/keytool' + (System.getProperty('os.name').toLowerCase().contains('windows') ? '.exe' : ''))
+    commandLine executable.absolutePath, '-genkeypair', '-noprompt',
+        '-keystore', key.absolutePath, '-storepass', 'android', '-keypass', 'android',
+        '-alias', 'androiddebugkey', '-dname', 'CN=Android Debug,O=Android,C=US',
+        '-keyalg', 'RSA', '-keysize', '2048', '-validity', '10000'
+}
+def licenseAssets = tasks.register('generateLicenseAssets', Copy) {
+    into layout.buildDirectory.dir('generated/licenseAssets/licenses')
+    from rootProject.file('../LICENSE')
+    from rootProject.file('../THIRD_PARTY_NOTICES.md')
+    from rootProject.file('licenses')
+    from(rootProject.file('THIRD_PARTY_NOTICES.md')) { rename { 'ANDROID_THIRD_PARTY_NOTICES.md' } }
+}
+tasks.named('preBuild').configure { dependsOn(nativeBuild, debugKeystore, licenseAssets) }
+

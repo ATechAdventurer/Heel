@@ -1,0 +1,23 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.runtime/
+.setup-code
+*.key
+*.pem
+*.jks
+*.keystore
+local.properties
+# Generated output
+.gradle/
+build/
+target/
+node_modules/
+jniLibs/
+*.apk
+*.aab
+*.log
+.idea/
+.DS_Store
+__pycache__/

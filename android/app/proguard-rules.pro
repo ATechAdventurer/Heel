@@ -1,0 +1,3 @@
+-keep class com.nonpolynomial.** { *; }
+-keep class io.github.gedgygedgy.** { *; }
+-keep class dev.prototype.lovense.NativeBridge { *; }

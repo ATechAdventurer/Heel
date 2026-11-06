@@ -1,0 +1,5 @@
+<resources>
+    <item name="spell_wink" type="id" />
+    <item name="spell_curious" type="id" />
+    <item name="spell_rest" type="id" />
+</resources>

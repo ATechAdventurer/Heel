@@ -1,0 +1,9 @@
+{
+    admin off
+}
+
+{$HEEL_DOMAIN} {
+    reverse_proxy 127.0.0.1:8787 {
+        header_up X-Real-IP {remote_host}
+    }
+}

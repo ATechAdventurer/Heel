@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Heel</string>
+    <string name="default_role" translatable="false"></string>
+    <string name="heel_wordmark">heel</string>
+    <string name="pick">Pick</string>
+    <string name="owner">Owner</string>
+    <string name="pet">Pet</string>
+    <string name="owner_hint">Lead the way</string>
+    <string name="pet_hint">Come closer</string>
+    <string name="local_build_note"></string>
+</resources>
