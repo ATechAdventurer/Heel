@@ -16,39 +16,28 @@ struct PairingView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Text("heel")
-                            .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
-                            .foregroundStyle(Color("AppAccent"))
-                    }
-                    .frame(minHeight: 44)
-                    .accessibilityLabel("Settings")
-                    Spacer()
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    Image(model.role == .owner ? "ArtemisOwner" : "ArtemisCurious")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 132)
+                        .accessibilityHidden(true)
+
+                    Text(model.connectionReason)
+                        .font(Nunito.font(size: 13, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                        .foregroundStyle(Color("AppMuted"))
+                        .multilineTextAlignment(.center)
+
+                    content
+                        .padding(.top, 20)
                 }
-                .frame(minHeight: 48)
-
-                Image(model.role == .owner ? "ArtemisOwner" : "ArtemisCurious")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 132)
-                    .accessibilityHidden(true)
-
-                Text(model.connectionReason)
-                    .font(Nunito.font(size: 13, weight: 500, relativeTo: .footnote, category: sizeCategory))
-                    .foregroundStyle(Color("AppMuted"))
-                    .multilineTextAlignment(.center)
-
-                content
-                    .padding(.top, 20)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 20)
-            .padding(.bottom, 24)
         }
         .background(Color("AppBackground"))
         .onAppear { model.onAppear() }
@@ -76,6 +65,25 @@ struct PairingView: View {
         } message: {
             Text("Changing or resetting the address removes this phone's saved identity. You'll need a new setup code.")
         }
+    }
+
+    /// Stays fixed above the scroll area rather than moving away with the page content.
+    private var header: some View {
+        HStack {
+            Button {
+                showingSettings = true
+            } label: {
+                Text("heel")
+                    .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
+                    .foregroundStyle(Color("AppAccent"))
+            }
+            .frame(minHeight: 44)
+            .accessibilityLabel("Settings")
+            Spacer()
+        }
+        .frame(minHeight: 48)
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
     }
 
     @ViewBuilder

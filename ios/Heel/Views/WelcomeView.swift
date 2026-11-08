@@ -7,39 +7,30 @@ struct WelcomeView: View {
     @Environment(\.sizeCategory) private var sizeCategory
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Text("heel")
-                            .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
-                            .foregroundStyle(Color("AppAccent"))
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    Text("Pick")
+                        .font(Nunito.font(size: 38, weight: 800, relativeTo: .largeTitle, category: sizeCategory))
+                        .foregroundStyle(Color("AppForeground"))
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 44)
+                        .accessibilityAddTraits(.isHeader)
+
+                    HStack(spacing: 12) {
+                        RoleCard(image: "ArtemisOwner", halo: "OwnerHalo", title: "Owner",
+                                 hint: "Lead the way", rotation: -5, action: { onChoose(.owner) })
+                        RoleCard(image: "ArtemisCurious", halo: "PetHalo", title: "Pet",
+                                 hint: "Come closer", rotation: 6, action: { onChoose(.pet) })
                     }
-                    .frame(minHeight: 44)
-                    .accessibilityLabel("Settings")
-                    Spacer()
+                    .padding(.top, 64)
                 }
-                .frame(minHeight: 48)
-
-                Text("Pick")
-                    .font(Nunito.font(size: 38, weight: 800, relativeTo: .largeTitle, category: sizeCategory))
-                    .foregroundStyle(Color("AppForeground"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 44)
-                    .accessibilityAddTraits(.isHeader)
-
-                HStack(spacing: 12) {
-                    RoleCard(image: "ArtemisOwner", halo: "OwnerHalo", title: "Owner",
-                             hint: "Lead the way", rotation: -5, action: { onChoose(.owner) })
-                    RoleCard(image: "ArtemisCurious", halo: "PetHalo", title: "Pet",
-                             hint: "Come closer", rotation: 6, action: { onChoose(.pet) })
-                }
-                .padding(.top, 64)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity)
         }
         .background(Color("AppBackground"))
         .alert("Settings", isPresented: $showingSettings) {
@@ -48,6 +39,25 @@ struct WelcomeView: View {
         } message: {
             Text("Pick Owner or Pet once. Heel remembers your choice. You can reset it here after pairing.")
         }
+    }
+
+    /// Stays fixed above the scroll area rather than moving away with the page content.
+    private var header: some View {
+        HStack {
+            Button {
+                showingSettings = true
+            } label: {
+                Text("heel")
+                    .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
+                    .foregroundStyle(Color("AppAccent"))
+            }
+            .frame(minHeight: 44)
+            .accessibilityLabel("Settings")
+            Spacer()
+        }
+        .frame(minHeight: 48)
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
     }
 }
 
