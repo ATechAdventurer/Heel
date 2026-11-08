@@ -6,6 +6,7 @@ struct PairingView: View {
     @State private var showingResetConfirm = false
     @State private var showingRelaySettings = false
     @State private var relayAddressDraft = ""
+    @Environment(\.sizeCategory) private var sizeCategory
 
     init(role: Role, onPaired: @escaping (Role) -> Void, onReturnToPick: @escaping () -> Void) {
         let viewModel = PairingViewModel(role: role)
@@ -18,15 +19,18 @@ struct PairingView: View {
         ScrollView {
             VStack(spacing: 0) {
                 HStack {
-                    Text("heel")
-                        .font(Nunito.font(size: 25, weight: 800))
-                        .foregroundStyle(Color("AppAccent"))
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Text("heel")
+                            .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
+                            .foregroundStyle(Color("AppAccent"))
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Settings")
                     Spacer()
                 }
                 .frame(minHeight: 48)
-                .contentShape(Rectangle())
-                .onTapGesture { showingSettings = true }
-                .accessibilityLabel("Settings")
 
                 Image(model.role == .owner ? "ArtemisOwner" : "ArtemisCurious")
                     .resizable()
@@ -35,7 +39,7 @@ struct PairingView: View {
                     .accessibilityHidden(true)
 
                 Text(model.connectionReason)
-                    .font(Nunito.font(size: 13, weight: 500))
+                    .font(Nunito.font(size: 13, weight: 500, relativeTo: .footnote, category: sizeCategory))
                     .foregroundStyle(Color("AppMuted"))
                     .multilineTextAlignment(.center)
 
@@ -98,21 +102,21 @@ struct PairingView: View {
                 if !model.hasToken {
                     body("First, give this phone its private setup code.")
                     SecureField("Phone setup code", text: $model.enrollmentCode)
-                        .textFieldStyle(.roundedBorder)
+                        .heelFieldStyle(category: sizeCategory)
                     actionButton("Connect this phone") { model.connectThisPhone() }
                 } else {
                     actionButton("Reconnect") { model.reconnect() }
                 }
 
                 if model.role == .owner {
-                    TextField("Your name", text: $model.ownerName).textFieldStyle(.roundedBorder)
-                    TextField("Their name", text: $model.petName).textFieldStyle(.roundedBorder)
-                    TextField("Their kind · puppy, bunny…", text: $model.species).textFieldStyle(.roundedBorder)
+                    TextField("Your name", text: $model.ownerName).heelFieldStyle(category: sizeCategory)
+                    TextField("Their name", text: $model.petName).heelFieldStyle(category: sizeCategory)
+                    TextField("Their kind · puppy, bunny…", text: $model.species).heelFieldStyle(category: sizeCategory)
                     actionButton("Make an invitation") { model.makeInvitation() }
                 } else {
                     TextField("Invitation code", text: $model.typedCode)
                         .textInputAutocapitalization(.characters)
-                        .textFieldStyle(.roundedBorder)
+                        .heelFieldStyle(category: sizeCategory)
                     actionButton("Find my owner") { model.findMyOwner() }
                 }
             }
@@ -124,7 +128,7 @@ struct PairingView: View {
             heading("A little invitation")
             body("Send this code to your \(model.species). It expires in 10 minutes.")
             Text(model.invite.isEmpty ? "Cancel, then make a new invitation" : model.invite)
-                .font(Nunito.font(size: 27, weight: 800))
+                .font(Nunito.font(size: 27, weight: 800, relativeTo: .title, category: sizeCategory))
                 .foregroundStyle(Color("AppForeground"))
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
@@ -142,7 +146,7 @@ struct PairingView: View {
         VStack(alignment: .leading, spacing: 8) {
             heading("There you are")
             Text("\(profile.optString("owner")) would like to call you \(profile.optString("pet")), their \(profile.optString("species")).")
-                .font(Nunito.font(size: 19, weight: 800))
+                .font(Nunito.font(size: 19, weight: 800, relativeTo: .title3, category: sizeCategory))
                 .foregroundStyle(Color("AppForeground"))
             body("Your phone connects to your device. Your owner can control it after you tap Ready. Pause is a temporary break; Safe Word stays stopped until you choose Ready again. Stop and unpair always stay yours.")
             actionButton("That's me") { model.acceptPreview() }
@@ -156,10 +160,10 @@ struct PairingView: View {
         return VStack(alignment: .leading, spacing: 8) {
             heading(owning ? "Your pet is here" : "One little check")
             Text(profile == nil ? "Compare this number on both phones." : "\(profile!.optString("owner")) + \(profile!.optString("pet"))")
-                .font(Nunito.font(size: 18, weight: 800))
+                .font(Nunito.font(size: 18, weight: 800, relativeTo: .title3, category: sizeCategory))
                 .foregroundStyle(Color("AppForeground"))
             Text(message.optString("confirmation"))
-                .font(Nunito.font(size: 36, weight: 800))
+                .font(Nunito.font(size: 36, weight: 800, relativeTo: .largeTitle, category: sizeCategory))
                 .foregroundStyle(Color("AppForeground"))
                 .frame(maxWidth: .infinity)
                 .multilineTextAlignment(.center)
@@ -176,25 +180,40 @@ struct PairingView: View {
 
     private func heading(_ text: String) -> some View {
         Text(text)
-            .font(Nunito.font(size: 28, weight: 800))
+            .font(Nunito.font(size: 28, weight: 800, relativeTo: .title, category: sizeCategory))
             .foregroundStyle(Color("AppForeground"))
     }
 
     private func body(_ text: String) -> some View {
         Text(text)
-            .font(Nunito.font(size: 15, weight: 500))
+            .font(Nunito.font(size: 15, weight: 500, relativeTo: .subheadline, category: sizeCategory))
             .foregroundStyle(Color("AppForeground"))
     }
 
     private func actionButton(_ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(Nunito.font(size: 15, weight: 700))
+                .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
                 .foregroundStyle(Color("AppAccent"))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(RoundedRectangle(cornerRadius: 18).fill(Color("PairingSurface")))
         }
+        .frame(minHeight: 44)
         .padding(.top, 4)
+    }
+}
+
+private extension View {
+    /// Shared text-field chrome: a system-material surface (so it adapts to Dark Mode
+    /// the way the custom hex palette around it can't on its own) and the brand font.
+    func heelFieldStyle(category: ContentSizeCategory) -> some View {
+        self
+            .textFieldStyle(.plain)
+            .font(Nunito.font(size: 16, weight: 500, relativeTo: .body, category: category))
+            .foregroundStyle(Color("AppForeground"))
+            .padding(12)
+            .frame(minHeight: 44)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
     }
 }

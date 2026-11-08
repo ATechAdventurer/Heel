@@ -25,6 +25,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.prototype.lovense
         INFOPLIST_FILE: Heel/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
         SWIFT_OBJC_BRIDGING_HEADER: Heel/Bridging/Heel-Bridging-Header.h
         LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../native/target/ios-xcode"
         OTHER_LDFLAGS: "-llovense_native -framework CoreBluetooth -framework Security"

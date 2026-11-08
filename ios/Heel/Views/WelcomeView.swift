@@ -4,23 +4,27 @@ import SwiftUI
 struct WelcomeView: View {
     let onChoose: (Role) -> Void
     @State private var showingSettings = false
+    @Environment(\.sizeCategory) private var sizeCategory
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
                 HStack {
-                    Text("heel")
-                        .font(Nunito.font(size: 25, weight: 800))
-                        .foregroundStyle(Color("AppAccent"))
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Text("heel")
+                            .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
+                            .foregroundStyle(Color("AppAccent"))
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityLabel("Settings")
                     Spacer()
                 }
                 .frame(minHeight: 48)
-                .contentShape(Rectangle())
-                .onTapGesture { showingSettings = true }
-                .accessibilityLabel("Settings")
 
                 Text("Pick")
-                    .font(Nunito.font(size: 38, weight: 800))
+                    .font(Nunito.font(size: 38, weight: 800, relativeTo: .largeTitle, category: sizeCategory))
                     .foregroundStyle(Color("AppForeground"))
                     .frame(maxWidth: .infinity)
                     .padding(.top, 44)
@@ -54,6 +58,7 @@ private struct RoleCard: View {
     let hint: String
     let rotation: Double
     let action: () -> Void
+    @Environment(\.sizeCategory) private var sizeCategory
 
     var body: some View {
         Button(action: action) {
@@ -73,12 +78,12 @@ private struct RoleCard: View {
                 .frame(height: 142)
 
                 Text(title)
-                    .font(Nunito.font(size: 25, weight: 800))
+                    .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
                     .foregroundStyle(Color("AppForeground"))
                     .padding(.top, 14)
 
                 Text(hint)
-                    .font(Nunito.font(size: 13, weight: 500))
+                    .font(Nunito.font(size: 13, weight: 500, relativeTo: .footnote, category: sizeCategory))
                     .foregroundStyle(Color("AppMuted"))
                     .padding(.top, 5)
             }
