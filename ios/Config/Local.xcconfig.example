@@ -1,0 +1,3 @@
+// Copy this file to Local.xcconfig (gitignored) and fill in your own team.
+// Only needed to run on a physical device; the simulator builds fine without it.
+DEVELOPMENT_TEAM =
