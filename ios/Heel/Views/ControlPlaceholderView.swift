@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Stands in for the real pairing flow (relay connection, invitations, approval) until
-/// that's ported. Honest about what it is rather than pretending to be finished.
-struct PairingPlaceholderView: View {
+/// Stands in for the real control screen (touch pad, safe word, spellbook) until that's
+/// ported. Honest about what it is rather than pretending to be finished.
+struct ControlPlaceholderView: View {
     let role: Role
-    let onResetRole: () -> Void
+    let onReturnToPick: () -> Void
 
     var body: some View {
         VStack(spacing: 16) {
@@ -23,11 +23,11 @@ struct PairingPlaceholderView: View {
                 .scaledToFit()
                 .frame(height: 132)
 
-            Text(role == .owner ? "Owner" : "Pet")
+            Text("Paired!")
                 .font(Nunito.font(size: 28, weight: 800))
                 .foregroundStyle(Color("AppForeground"))
 
-            Text("Pairing isn't built yet — this is just confirming the role picker works.")
+            Text("The control screen (touch pad, safe word, spellbook) isn't built yet — this just confirms pairing finished.")
                 .font(Nunito.font(size: 14, weight: 500))
                 .foregroundStyle(Color("AppMuted"))
                 .multilineTextAlignment(.center)
@@ -35,7 +35,7 @@ struct PairingPlaceholderView: View {
 
             Spacer()
 
-            Button("Change role", action: onResetRole)
+            Button("Back to Pick", action: onReturnToPick)
                 .font(Nunito.font(size: 15, weight: 700))
                 .foregroundStyle(Color("AppAccent"))
                 .padding(.bottom, 24)
@@ -47,5 +47,5 @@ struct PairingPlaceholderView: View {
 }
 
 #Preview {
-    PairingPlaceholderView(role: .owner, onResetRole: {})
+    ControlPlaceholderView(role: .owner, onReturnToPick: {})
 }
