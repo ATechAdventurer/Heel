@@ -77,6 +77,11 @@ jobs:
       - run: rustup target add aarch64-apple-ios-sim
       - run: cp Config/Local.xcconfig.example Config/Local.xcconfig
       - run: xcodegen generate
+      - name: Diagnose available Xcodes and simulators
+        run: |
+          ls /Applications | grep -i xcode || true
+          xcodebuild -version
+          xcrun simctl list devices available
       - run: |
           xcodebuild -project Heel.xcodeproj -scheme Heel \
             -destination 'platform=iOS Simulator,name=iPhone 16' \
