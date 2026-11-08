@@ -49,10 +49,17 @@ struct HeelApp: App {
                 path.removeAll()
             })
         case .paired(let role):
-            ControlPlaceholderView(role: role, onReturnToPick: {
-                RolePreferences.reset()
-                path.removeAll()
-            })
+            if role == .owner {
+                ControlView(onReturnToPick: {
+                    RolePreferences.reset()
+                    path.removeAll()
+                })
+            } else {
+                ControlPlaceholderView(role: role, onReturnToPick: {
+                    RolePreferences.reset()
+                    path.removeAll()
+                })
+            }
         }
     }
 }
