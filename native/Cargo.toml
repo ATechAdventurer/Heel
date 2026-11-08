@@ -6,7 +6,7 @@ publish = false
 
 [lib]
 name = "lovense_native"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 
 [dependencies]
 buttplug = { version = "=9.0.9", default-features = false, features = ["client", "server", "serialize-json", "tokio-runtime"] }
