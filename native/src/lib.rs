@@ -1,5 +1,5 @@
 // Production entry points are JNI-only; host builds exercise the hardware-free tests.
-#![cfg_attr(not(target_os = "android"), allow(dead_code))]
+#![cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 
 use buttplug::{
     client::{ButtplugClient, ButtplugClientDevice, ButtplugClientEvent, LinearCommand, RotateCommand, ScalarCommand},
@@ -20,7 +20,7 @@ mod wire_tests;
 use live_control::{LiveFrame, LiveQueue, OutputValue, PendingFrame};
 #[cfg(any(target_os = "android", test))]
 mod jvm_runtime;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use buttplug::server::device::hardware::communication::btleplug::BtlePlugCommunicationManagerBuilder;
 
 #[derive(Debug, Deserialize)]
@@ -224,7 +224,7 @@ async fn run_engine(shared: Arc<Shared>, mut commands: mpsc::Receiver<(u64, Comm
     let config = load_protocol_configs(&Some(lovense_config()?), &None, false)
         .map_err(|e| e.to_string())?.finish().map_err(|e| e.to_string())?;
     let mut manager_builder = ServerDeviceManagerBuilder::new(config);
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     manager_builder.comm_manager(BtlePlugCommunicationManagerBuilder::default());
     let manager = manager_builder.finish().map_err(|e| e.to_string())?;
     let server = ButtplugServerBuilder::new(manager).finish().map_err(|e| e.to_string())?;
@@ -530,6 +530,65 @@ mod android {
             serde_json::to_string(&values).unwrap_or_else(|_| "[]".to_owned())
         });
         string(&env, result.unwrap_or_else(|_| "[]".to_owned()))
+    }
+}
+
+/// C-ABI boundary for the iOS app. btleplug's CoreBluetooth backend needs no JVM
+/// attachment, so this is a plain Tokio runtime with no equivalent of jvm_runtime.
+#[cfg(target_os = "ios")]
+mod ios {
+    use super::*;
+    use std::ffi::{CStr, CString};
+    use std::os::raw::c_char;
+
+    fn string(value: String) -> *mut c_char {
+        CString::new(value).unwrap_or_default().into_raw()
+    }
+    fn guarded(action: impl FnOnce() -> Result<(), String>) -> String {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(action)) {
+            Ok(Ok(())) => String::new(),
+            Ok(Err(error)) => error,
+            Err(_) => "Native engine failed. Close and reopen the app.".to_owned(),
+        }
+    }
+    #[no_mangle]
+    pub extern "C" fn lovense_native_initialize() -> *mut c_char {
+        let result = guarded(|| {
+            if BRIDGE.get().is_some() { return Ok(()); }
+            let runtime = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2).thread_name("lovense-ble").enable_all()
+                .build().map_err(|e| e.to_string())?;
+            BRIDGE.set(create_bridge(runtime)?).map_err(|_| "Engine already initialized".to_owned())
+        });
+        string(result)
+    }
+    #[no_mangle]
+    pub extern "C" fn lovense_native_submit(value: *const c_char) -> *mut c_char {
+        let result = guarded(|| {
+            if value.is_null() { return Err("Null command".to_owned()); }
+            // Safety: callers must pass a valid, NUL-terminated string they still own;
+            // it is only read for the duration of this call.
+            let text = unsafe { CStr::from_ptr(value) }.to_str().map_err(|e| e.to_string())?;
+            submit(text)
+        });
+        string(result)
+    }
+    #[no_mangle]
+    pub extern "C" fn lovense_native_drain() -> *mut c_char {
+        let result = std::panic::catch_unwind(|| {
+            let Some(bridge) = BRIDGE.get() else { return "[]".to_owned(); };
+            *bridge.shared.heartbeat.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+            let values: Vec<Value> = bridge.shared.events.lock().unwrap_or_else(|e| e.into_inner()).drain(..).collect();
+            serde_json::to_string(&values).unwrap_or_else(|_| "[]".to_owned())
+        });
+        string(result.unwrap_or_else(|_| "[]".to_owned()))
+    }
+    /// Every string returned above must be released through this, exactly once.
+    #[no_mangle]
+    pub extern "C" fn lovense_native_free_string(value: *mut c_char) {
+        if value.is_null() { return; }
+        // Safety: value must be a pointer this module previously returned, not yet freed.
+        unsafe { drop(CString::from_raw(value)); }
     }
 }
 

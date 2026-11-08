@@ -14,7 +14,7 @@ v0.7.1 adds LovenseScanPolicy before scan callbacks reach JNI and an approved-ad
 - Gradle wrapper: https://github.com/gradle/gradle — Apache 2.0 and bundled notices in `licenses/gradle-Apache-2.0.txt`.
 - Nunito: https://github.com/google/fonts/tree/main/ofl/nunito — SIL Open Font License 1.1, bundled in `licenses/Nunito-OFL.txt`. The unmodified variable font is bundled for offline welcome-screen typography.
 
-Additional Rust dependencies are locked in `native/Cargo.lock`. License texts collected from the resolved registry packages are included in `licenses/rust-dependency-notices.txt` (including host build/test packages). Android Gradle tooling is resolved from Google's Maven repository. This prototype is not affiliated with or endorsed by Lovense, Intiface, or the Buttplug maintainers.
+Additional Rust dependencies are locked in `../native/Cargo.lock`. The crate is shared with the iOS app; see `../native/README.md`. License texts collected from the resolved registry packages are included in `licenses/rust-dependency-notices.txt` (including host build/test packages). Android Gradle tooling is resolved from Google's Maven repository. This prototype is not affiliated with or endorsed by Lovense, Intiface, or the Buttplug maintainers.
 
 The character images under `app/src/main/res/drawable-nodpi/` are personal artwork supplied for Heel. They are excluded from the BSD-3-Clause code license and retain the rights of their respective rights holders. Inclusion does not grant permission for independent artwork reuse or redistribution. See the root `THIRD_PARTY_NOTICES.md`.
 

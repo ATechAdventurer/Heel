@@ -9,6 +9,7 @@
 *.jks
 *.keystore
 local.properties
+ios/Config/Local.xcconfig
 # Generated output
 .gradle/
 build/
@@ -21,3 +22,7 @@ jniLibs/
 .idea/
 .DS_Store
 __pycache__/
+ios/*.xcodeproj/
+ios/*.png
+DerivedData/
+xcuserdata/
