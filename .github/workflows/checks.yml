@@ -66,3 +66,18 @@ jobs:
         with:
           name: Android-test-reports
           path: android/app/build/reports/
+  ios:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install xcodegen
+      - run: rustup target add aarch64-apple-ios-sim
+      - run: cp Config/Local.xcconfig.example Config/Local.xcconfig
+      - run: xcodegen generate
+      - run: |
+          xcodebuild -project Heel.xcodeproj -scheme Heel \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            -configuration Debug test
