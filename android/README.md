@@ -36,7 +36,7 @@ No relay is hardcoded. First choose a role, set your own HTTPS relay address and
 
 ```sh
 ./gradlew testDebugUnitTest lintDebug assembleDebug
-cd native
+cd ../native
 cargo test --locked
 ```
 

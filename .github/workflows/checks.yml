@@ -50,7 +50,7 @@ jobs:
           rustup default stable
           rustup target add aarch64-linux-android
           cargo install cargo-ndk --version 3.5.4 --locked
-      - run: cargo test --locked --manifest-path native/Cargo.toml
+      - run: cargo test --locked --manifest-path ../native/Cargo.toml
       - run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
       - uses: actions/upload-artifact@v4
         with:

@@ -57,11 +57,11 @@ dependencies {
 }
 
 def nativeBuild = tasks.register('buildNative', Exec) {
-    workingDir rootProject.file('native')
+    workingDir rootProject.file('../native')
     doFirst { environment 'ANDROID_NDK_HOME', android.ndkDirectory.absolutePath }
     commandLine 'cargo', 'ndk', '-t', 'arm64-v8a', '-p', '26',
-            '-o', '../app/src/main/jniLibs', 'build', '--release', '--locked'
-    inputs.files(fileTree('../native') { exclude 'target/**' })
+            '-o', '../android/app/src/main/jniLibs', 'build', '--release', '--locked'
+    inputs.files(fileTree('../../native') { exclude 'target/**' })
     outputs.file('src/main/jniLibs/arm64-v8a/liblovense_native.so')
 }
 def debugKeystore = tasks.register('createDebugKeystore', Exec) {
