@@ -13,6 +13,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     ENABLE_USER_SCRIPT_SANDBOXING: NO
     CODE_SIGN_STYLE: Automatic
+    HEADER_SEARCH_PATHS: "$(SRCROOT)/../native/include"
 
 targets:
   Heel:
@@ -25,7 +26,6 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.prototype.lovense
         INFOPLIST_FILE: Heel/Info.plist
         SWIFT_OBJC_BRIDGING_HEADER: Heel/Bridging/Heel-Bridging-Header.h
-        HEADER_SEARCH_PATHS: "$(SRCROOT)/../native/include"
         LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../native/target/ios-xcode"
         OTHER_LDFLAGS: "-llovense_native -framework CoreBluetooth -framework Security"
     preBuildScripts:
