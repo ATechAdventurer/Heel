@@ -7,6 +7,7 @@ struct ControlView: View {
     let onReturnToPick: () -> Void
     @State private var showingSettings = false
     @State private var showingResetConfirm = false
+    @State private var showingSpellbook = false
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(\.colorScheme) private var colorScheme
 
@@ -21,6 +22,10 @@ struct ControlView: View {
             deviceCaption
                 .padding(.horizontal, 24)
                 .padding(.top, 6)
+
+            creativeCaption
+                .padding(.horizontal, 24)
+                .padding(.top, 4)
 
             readouts
                 .padding(.horizontal, 24)
@@ -69,6 +74,23 @@ struct ControlView: View {
         } message: {
             Text("This stops the session and returns to Pick. This phone's setup identity is kept, so you won't need another setup code.")
         }
+        .alert("Spellbook", isPresented: Binding(get: { model.spellError != nil }, set: { if !$0 { model.spellError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.spellError ?? "")
+        }
+        .sheet(isPresented: $showingSpellbook) {
+            SpellbookView(model: model)
+        }
+        .sheet(isPresented: Binding(get: { model.pendingSpellDraft }, set: { if !$0 { model.discardDraft() } })) {
+            SaveSpellSheet(model: model)
+        }
+    }
+
+    private func tapSpellbook() {
+        if model.isPlayingSpell { model.stopPlayback() }
+        else if model.isRecording { model.finishRecording() }
+        else { showingSpellbook = true }
     }
 
     private var header: some View {
@@ -83,10 +105,31 @@ struct ControlView: View {
             .frame(minHeight: 44)
             .accessibilityLabel("Settings")
             Spacer()
+            Button(action: tapSpellbook) {
+                Text(model.isPlayingSpell ? "Stop spell" : model.isRecording ? "Finish recording" : "Spellbook")
+                    .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
+                    .foregroundStyle(Color("AppAccent"))
+            }
+            .frame(minHeight: 44)
         }
         .frame(minHeight: 48)
         .padding(.horizontal, 24)
         .padding(.top, 20)
+    }
+
+    @ViewBuilder
+    private var creativeCaption: some View {
+        if let name = model.playingSpellName {
+            Text("Playing \u{201c}\(name)\u{201d}\u{2026} touch the pad to take over.")
+                .font(Nunito.font(size: 12, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                .foregroundStyle(Color("AppMuted"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if model.isRecording {
+            Text("Recording your gesture\u{2026}")
+                .font(Nunito.font(size: 12, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                .foregroundStyle(Color("AppMuted"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var sessionRow: some View {

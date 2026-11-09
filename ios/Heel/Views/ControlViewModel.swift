@@ -8,6 +8,9 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     private let relay: RelayClient
     private let gate = SessionGate(pet: false)
     private let haptics: OwnerHaptics
+    private let spellbook: SpellBook
+    private let now: () -> Int64
+    private let schedule: (TimeInterval, @escaping () -> Void) -> Void
     private weak var touchModel: TouchModel?
 
     var onReturnToPick: (() -> Void)?
@@ -21,19 +24,42 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published private(set) var displayValues: [Double] = []
     @Published private(set) var hapticsEnabled = HapticsPreferences.get()
 
+    @Published private(set) var spells: [SpellBook.Spell] = []
+    @Published private(set) var isRecording = false
+    @Published private(set) var pendingSpellDraft = false
+    @Published private(set) var playingSpellName: String?
+    @Published var spellError: String?
+
     private var outgoingSequence: Int64 = 0
     private var lastSubmitted: [Double]?
     private var restoredEpoch = ""
     private var restoredSequence: Int64 = 0
 
-    init(relay: RelayClient = .shared, haptics: OwnerHaptics? = nil) {
+    private var recording: SpellBook.Recording?
+    private var recordingGeneration = 0
+    private var draftRecording: SpellBook.Recording?
+    private var draftFinishedAt: Int64 = 0
+    private var playing: SpellBook.Spell?
+    private var playbackStarted: Int64 = 0
+    private var playbackEpoch = ""
+    private var playbackGeneration = 0
+
+    init(relay: RelayClient = .shared, haptics: OwnerHaptics? = nil, spellbook: SpellBook = SpellBook(),
+         now: @escaping () -> Int64 = { Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000) },
+         schedule: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, work in
+             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+         }) {
         self.relay = relay
         self.haptics = haptics ?? OwnerHaptics(output: PhoneHapticsOutput())
+        self.spellbook = spellbook
+        self.now = now
+        self.schedule = schedule
     }
 
     func onAppear() {
         relay.attach(self)
         if relay.connected { relayState = [:] }
+        spells = spellbook.all()
     }
 
     func onDisappear() {
@@ -242,6 +268,8 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     }
 
     func touchStateChanged() {
+        if playing != nil, let touchModel, touchModel.activeTouchCount() > 0 { stopPlayback() }
+        captureGesture()
         touchVersion += 1
         displayValues = touchModel?.visualTargets() ?? []
         updateHaptics()
@@ -249,6 +277,106 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
 
     func touchCancelled() {
         stopAll()
+    }
+
+    // MARK: - Spellbook
+
+    var canPerformSpell: Bool { canControl }
+    var isPlayingSpell: Bool { playingSpellName != nil }
+
+    func startRecording() {
+        guard canPerformSpell, recording == nil, playing == nil else { return }
+        resetLocal()
+        guard let draft = try? SpellBook.Recording(channels: features.count, now: now()) else { return }
+        recording = draft
+        isRecording = true
+        recordingGeneration += 1
+        let generation = recordingGeneration
+        schedule(Double(SpellBook.maxDuration) / 1000) { [weak self] in
+            guard let self, generation == self.recordingGeneration else { return }
+            self.finishRecording()
+        }
+    }
+
+    func finishRecording() {
+        guard let draft = recording else { return }
+        let finishedAt = now()
+        recording = nil
+        isRecording = false
+        recordingGeneration += 1
+        resetLocal()
+        guard draft.hasMovement() else { spellError = "Move a paw to make a recording"; return }
+        draftRecording = draft
+        draftFinishedAt = finishedAt
+        pendingSpellDraft = true
+    }
+
+    func discardDraft() {
+        draftRecording = nil
+        pendingSpellDraft = false
+    }
+
+    func saveDraft(name: String, sticker: Int) {
+        guard let draft = draftRecording else { return }
+        do {
+            let spell = try draft.finish(now: draftFinishedAt, name: name, sticker: sticker)
+            try spellbook.save(spell)
+            draftRecording = nil
+            pendingSpellDraft = false
+            spells = spellbook.all()
+        } catch {
+            spellError = (error as? SpellBook.SpellBookError)?.errorDescription ?? "Could not save your Spellbook. Please try again."
+        }
+    }
+
+    func deleteSpell(_ id: String) {
+        do {
+            try spellbook.delete(id: id)
+            spells = spellbook.all()
+        } catch {
+            spellError = (error as? SpellBook.SpellBookError)?.errorDescription ?? "Could not save your Spellbook. Please try again."
+        }
+    }
+
+    func startPlayback(_ spell: SpellBook.Spell) {
+        guard canPerformSpell, spell.channels == features.count else {
+            spellError = "Choose a matching device and start a session first"
+            return
+        }
+        resetLocal()
+        playing = spell
+        playingSpellName = spell.name
+        playbackStarted = now()
+        playbackEpoch = gate.epoch
+        playbackGeneration += 1
+        playbackTick(playbackGeneration)
+    }
+
+    func stopPlayback() {
+        guard playing != nil else { return }
+        resetLocal()
+    }
+
+    private func captureGesture() {
+        guard let recording, let touchModel else { return }
+        var touching = 0
+        for point in 0..<touchModel.size where touchModel.isPointActive(point) { touching |= 1 << point }
+        let accepted = (try? recording.add(now: now(), values: touchModel.visualTargets(), touching: touching)) ?? false
+        if !accepted { finishRecording() }
+    }
+
+    private func playbackTick(_ generation: Int) {
+        guard generation == playbackGeneration, let spell = playing, let touchModel,
+              canPerformSpell, playbackEpoch == gate.epoch
+        else { stopPlayback(); return }
+        let elapsed = now() - playbackStarted
+        guard elapsed < spell.duration else { stopPlayback(); return }
+        guard (try? touchModel.setVisualTargets(spell.at(elapsed))) != nil else { stopPlayback(); return }
+        touchVersion += 1
+        displayValues = touchModel.visualTargets()
+        guard submitFrame(touchModel.targets()) else { stopPlayback(); return }
+        updateHaptics()
+        schedule(1.0 / 60.0) { [weak self] in self?.playbackTick(generation) }
     }
 
     @discardableResult
@@ -277,5 +405,11 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         touchVersion += 1
         displayValues = Array(repeating: 0, count: features.count)
         haptics.stop()
+        recording = nil
+        isRecording = false
+        recordingGeneration += 1
+        playing = nil
+        playingSpellName = nil
+        playbackGeneration += 1
     }
 }
