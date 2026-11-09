@@ -1,6 +1,6 @@
 name: Heel
 options:
-  bundleIdPrefix: dev.prototype
+  bundleIdPrefix: dev.atechadventure
   deploymentTarget:
     iOS: "16.1"
 configFiles:
@@ -23,7 +23,7 @@ targets:
       - path: Heel
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.prototype.lovense
+        PRODUCT_BUNDLE_IDENTIFIER: dev.atechadventure.heel
         INFOPLIST_FILE: Heel/Info.plist
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_OBJC_BRIDGING_HEADER: Heel/Bridging/Heel-Bridging-Header.h
@@ -43,7 +43,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: dev.prototype.lovense.tests
+        PRODUCT_BUNDLE_IDENTIFIER: dev.atechadventure.heel.tests
     dependencies:
       - target: Heel
 
