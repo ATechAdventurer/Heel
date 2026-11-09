@@ -101,7 +101,7 @@ private struct RoleCard: View {
             .padding(.top, 8)
             .padding(.bottom, 16)
             .frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: 24).fill(.white))
+            .background(RoundedRectangle(cornerRadius: 24).fill(Color("CardSurface")))
         }
         .buttonStyle(PressableCardStyle())
         .accessibilityLabel("\(title). \(hint)")
