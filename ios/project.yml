@@ -28,7 +28,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_OBJC_BRIDGING_HEADER: Heel/Bridging/Heel-Bridging-Header.h
         LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../native/target/ios-xcode"
-        OTHER_LDFLAGS: "-llovense_native -framework CoreBluetooth -framework Security"
+        OTHER_LDFLAGS: "-llovense_native -framework CoreBluetooth -framework Security -framework CoreHaptics"
     preBuildScripts:
       - name: Build native core (Rust)
         script: |
