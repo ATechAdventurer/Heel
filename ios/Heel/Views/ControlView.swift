@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Owner's live control screen: touch pad, session start/stop, and per-feature readouts.
-/// Pet role still uses ControlPlaceholderView until the native BLE bridge is wired up.
+/// Pet role uses PetControlView instead.
 struct ControlView: View {
     @StateObject private var model = ControlViewModel()
     let onReturnToPick: () -> Void

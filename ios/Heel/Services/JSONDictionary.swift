@@ -26,4 +26,12 @@ extension Dictionary where Key == String, Value == Any {
     func optArray(_ key: String) -> [Any]? {
         self[key] as? [Any]
     }
+
+    /// The wire format the native engine's commands expect (see native/src/lib.rs's Command enum).
+    var compactJSONString: String {
+        guard JSONSerialization.isValidJSONObject(self),
+              let data = try? JSONSerialization.data(withJSONObject: self)
+        else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
 }
