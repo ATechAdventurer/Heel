@@ -18,7 +18,7 @@ final class CredentialStore {
     }
 
     private let defaults: UserDefaults
-    private let service = "dev.prototype.lovense.relay"
+    private let service = "dev.atechadventure.heel.relay"
     private let account = "token"
 
     init(defaults: UserDefaults = .standard) {
