@@ -21,6 +21,8 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
 
     private var outgoingSequence: Int64 = 0
     private var lastSubmitted: [Double]?
+    private var restoredEpoch = ""
+    private var restoredSequence: Int64 = 0
 
     init(relay: RelayClient = .shared) {
         self.relay = relay
@@ -88,7 +90,41 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         if wasActive && !gate.active() { resetLocal() }
         if oldEpoch != gate.epoch { outgoingSequence = 0; lastSubmitted = nil }
         if message.optBool("active") { mirror(message) }
+        if message.optBool("resumeAllowed") && !gate.canRecover() {
+            relay.stop()
+            return
+        }
+        if gate.active(), message.optBool("resumed") {
+            restoreHeld(message.optDictionary("restore"), message.optDictionary("device"))
+        }
         bindDevice(message.optDictionary("device"))
+    }
+
+    /// After a reconnect, the relay replays the last acknowledged Hold level once so the pet's
+    /// device doesn't sit at zero while the owner reopens the app. Reasserted as a fresh frame
+    /// rather than trusted outright, since the relay's own reconnection still has to apply it.
+    private func restoreHeld(_ restore: JSONDictionary?, _ device: JSONDictionary?) {
+        guard let restore, let device, restore.optBool("hold"),
+              gate.canRecover(), restoredEpoch != gate.epoch, outgoingSequence == 0
+        else { return }
+        guard let sourceDevice = restore.optDictionary("device"),
+              sourceDevice.optInt("id") == device.optInt("id"),
+              (sourceDevice.optArray("features") ?? []).count == (device.optArray("features") ?? []).count
+        else { return }
+        let sourceValues = (restore.optArray("values") ?? []).compactMap { ($0 as? NSNumber)?.doubleValue }
+        let featureList = (device.optArray("features") ?? []).compactMap { $0 as? JSONDictionary }
+        guard sourceValues.count == featureList.count, (1...2).contains(sourceValues.count) else { return }
+        var values: [Double] = []
+        for (index, value) in sourceValues.enumerated() {
+            guard value.isFinite, value >= 0, value <= 1 else { return }
+            values.append(TouchModel.normalize(value, steps: featureList[index].optInt("steps")))
+        }
+        restoredEpoch = gate.epoch
+        outgoingSequence += 1
+        restoredSequence = outgoingSequence
+        relay.frame(RelayClient.json("frame", [
+            "epoch": restoredEpoch, "seq": restoredSequence, "values": values, "hold": true,
+        ]), priorityZero: true)
     }
 
     private func bindDevice(_ device: JSONDictionary?) {
