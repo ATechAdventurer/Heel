@@ -7,6 +7,7 @@ import Foundation
 final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     private let relay: RelayClient
     private let gate = SessionGate(pet: false)
+    private let haptics: OwnerHaptics
     private weak var touchModel: TouchModel?
 
     var onReturnToPick: (() -> Void)?
@@ -18,14 +19,16 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published private(set) var hold = false
     @Published private(set) var touchVersion = 0
     @Published private(set) var displayValues: [Double] = []
+    @Published private(set) var hapticsEnabled = HapticsPreferences.get()
 
     private var outgoingSequence: Int64 = 0
     private var lastSubmitted: [Double]?
     private var restoredEpoch = ""
     private var restoredSequence: Int64 = 0
 
-    init(relay: RelayClient = .shared) {
+    init(relay: RelayClient = .shared, haptics: OwnerHaptics? = nil) {
         self.relay = relay
+        self.haptics = haptics ?? OwnerHaptics(output: PhoneHapticsOutput())
     }
 
     func onAppear() {
@@ -35,6 +38,26 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
 
     func onDisappear() {
         relay.detach(self)
+        haptics.stop()
+    }
+
+    func setHapticsEnabled(_ enabled: Bool) {
+        hapticsEnabled = enabled
+        HapticsPreferences.set(enabled)
+        updateHaptics()
+    }
+
+    /// Feels roughly what the pet's device is doing: the loudest point still held down,
+    /// using its visual (continuous) level rather than the quantized output.
+    private func updateHaptics() {
+        guard hapticsEnabled, canControl, let touchModel else { haptics.update(0); return }
+        let output = touchModel.targets()
+        let visual = touchModel.visualTargets()
+        var level = 0.0
+        for index in output.indices where output[index] > 0 {
+            level = max(level, visual[index])
+        }
+        haptics.update(level)
     }
 
     func bindTouchModel(_ model: TouchModel) {
@@ -98,6 +121,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
             restoreHeld(message.optDictionary("restore"), message.optDictionary("device"))
         }
         bindDevice(message.optDictionary("device"))
+        updateHaptics()
     }
 
     /// After a reconnect, the relay replays the last acknowledged Hold level once so the pet's
@@ -151,6 +175,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         touchModel.setHold(hold)
         touchVersion += 1
         displayValues = touchModel.visualTargets()
+        updateHaptics()
     }
 
     // MARK: - Session controls
@@ -208,6 +233,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         if canControl, let targets = touchModel?.targets() {
             submitFrame(targets, force: true)
         }
+        updateHaptics()
     }
 
     func touchTargetsChanged(_ targets: [Double]) {
@@ -218,6 +244,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     func touchStateChanged() {
         touchVersion += 1
         displayValues = touchModel?.visualTargets() ?? []
+        updateHaptics()
     }
 
     func touchCancelled() {
@@ -249,5 +276,6 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         hold = false
         touchVersion += 1
         displayValues = Array(repeating: 0, count: features.count)
+        haptics.stop()
     }
 }

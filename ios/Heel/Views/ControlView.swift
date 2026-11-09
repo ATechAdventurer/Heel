@@ -44,6 +44,10 @@ struct ControlView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
 
+            hapticsToggle
+                .padding(.horizontal, 24)
+                .padding(.top, 4)
+
             stopButton
                 .padding(.horizontal, 24)
                 .padding(.top, 8)
@@ -131,6 +135,16 @@ struct ControlView: View {
     private var holdToggle: some View {
         Toggle(isOn: Binding(get: { model.hold }, set: { model.setHold($0) })) {
             Text("Hold on release")
+                .font(Nunito.font(size: 14, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                .foregroundStyle(Color("AppForeground"))
+        }
+        .tint(Color("AppAccent"))
+        .frame(minHeight: 44)
+    }
+
+    private var hapticsToggle: some View {
+        Toggle(isOn: Binding(get: { model.hapticsEnabled }, set: { model.setHapticsEnabled($0) })) {
+            Text("Feel it on this phone")
                 .font(Nunito.font(size: 14, weight: 500, relativeTo: .footnote, category: sizeCategory))
                 .foregroundStyle(Color("AppForeground"))
         }
