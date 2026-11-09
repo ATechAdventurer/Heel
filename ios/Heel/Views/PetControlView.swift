@@ -25,7 +25,6 @@ struct PetControlView: View {
             deviceList
 
             scanButton
-                .disabled(!model.ready)
                 .padding(.horizontal, 24)
 
             Spacer()
@@ -34,8 +33,7 @@ struct PetControlView: View {
                 Text("Back to Pick")
                     .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
                     .foregroundStyle(Color("AppAccent"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .background(RoundedRectangle(cornerRadius: 18).fill(Color("PairingSurface")))
             }
             .padding(.horizontal, 24)
@@ -96,9 +94,11 @@ struct PetControlView: View {
                             }
                         }
                         .padding(12)
+                        .frame(minHeight: 44)
                         .background(RoundedRectangle(cornerRadius: 14).fill(Color("CardSurface")))
                     }
-                    .accessibilityLabel("\(device.name), \(device.features.count) vibration controls\(model.selected?.id == device.id ? ", selected" : "")")
+                    .accessibilityLabel("\(device.name), \(device.features.count) vibration controls")
+                    .accessibilityAddTraits(model.selected?.id == device.id ? [.isSelected] : [])
                 }
             }
             .padding(.horizontal, 24)
@@ -111,11 +111,12 @@ struct PetControlView: View {
         } label: {
             Text(model.scanning ? "Stop scan" : "Scan")
                 .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(RoundedRectangle(cornerRadius: 18).fill(Color("AppAccent")))
+                .foregroundStyle(model.ready ? .white : Color("AppAccent"))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 18).fill(model.ready ? Color("AppAccent") : Color("PairingSurface")))
         }
+        .disabled(!model.ready)
+        .accessibilityHint(model.ready ? "" : "Waiting to pair first")
     }
 }
 
