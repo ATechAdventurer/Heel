@@ -13,6 +13,7 @@ protocol SessionRelay: AnyObject {
     func attach(_ value: RelayListener)
     func detach(_ value: RelayListener)
     @discardableResult func send(_ message: JSONDictionary) -> Bool
+    func pause()
     func stop()
     func connect(enrollment: String?)
 }
@@ -24,7 +25,6 @@ protocol OwnerRelay: SessionRelay {
 
 @MainActor
 protocol PetRelay: SessionRelay {
-    func pause()
     func safeWord()
     func clearSafeWordForReady()
     func blockRetries(_ blocked: Bool)

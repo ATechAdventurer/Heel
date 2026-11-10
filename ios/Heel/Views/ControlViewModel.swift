@@ -24,6 +24,12 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published private(set) var displayValues: [Double] = []
     @Published private(set) var hapticsEnabled = HapticsPreferences.get()
 
+    /// VoiceOver and Switch Control can't drag a paw, so Owner drives each feature with a slider
+    /// and Start/Stop instead (Android's TalkBack "slider mode").
+    @Published private(set) var sliderMode = false
+    @Published private(set) var sliderLevels: [Double] = []
+    @Published private(set) var sliderRunning: [Bool] = []
+
     @Published private(set) var spells: [SpellBook.Spell] = []
     @Published private(set) var isRecording = false
     @Published private(set) var pendingSpellDraft = false
@@ -157,7 +163,8 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     /// device doesn't sit at zero while the owner reopens the app. Reasserted as a fresh frame
     /// rather than trusted outright, since the relay's own reconnection still has to apply it.
     private func restoreHeld(_ restore: JSONDictionary?, _ device: JSONDictionary?) {
-        guard let restore, let device, restore.optBool("hold"),
+        // A held level came from a touch pad; sliders couldn't show or release it.
+        guard let restore, let device, restore.optBool("hold"), !sliderMode,
               gate.canRecover(), restoredEpoch != gate.epoch, outgoingSequence == 0
         else { return }
         guard let sourceDevice = restore.optDictionary("device"),
@@ -182,7 +189,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
 
     private func bindDevice(_ device: JSONDictionary?) {
         guard let device else {
-            if deviceName != nil { deviceName = nil; features = [] }
+            if deviceName != nil { deviceName = nil; features = []; sliderLevels = []; sliderRunning = [] }
             return
         }
         let name = device.optString("name")
@@ -193,6 +200,8 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         guard name != deviceName || parsed != features else { return }
         deviceName = name
         features = parsed
+        sliderLevels = Array(repeating: 0, count: parsed.count)
+        sliderRunning = Array(repeating: false, count: parsed.count)
     }
 
     private func mirror(_ message: JSONDictionary) {
@@ -295,6 +304,58 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         stopAll()
     }
 
+    // MARK: - Slider mode
+
+    /// Smallest VoiceOver-friendly increment: one device step, but never finer than 5%.
+    static func sliderStep(for feature: TouchModel.Feature) -> Double {
+        feature.stepCount > 0 ? max(1 / Double(feature.stepCount), 0.05) : 0.05
+    }
+
+    /// Switching input mode pauses a running session rather than carrying output across it.
+    func setSliderMode(_ enabled: Bool) {
+        guard enabled != sliderMode else { return }
+        if gate.active() {
+            gate.pause()
+            resetLocal()
+            relay.pause()
+        }
+        sliderMode = enabled
+        resetLocal()
+    }
+
+    func setSliderLevel(_ index: Int, _ value: Double) {
+        guard sliderMode, canControl, features.indices.contains(index) else { return }
+        if playing != nil { stopPlayback() }
+        sliderLevels[index] = TouchModel.normalize(value, steps: features[index].stepCount)
+        if sliderRunning[index] { submitSliders() }
+    }
+
+    func startSlider(_ index: Int) {
+        guard sliderMode, canControl, features.indices.contains(index) else { return }
+        if playing != nil { stopPlayback() }
+        sliderRunning[index] = true
+        submitSliders()
+    }
+
+    func stopSlider(_ index: Int) {
+        guard sliderMode, canControl, features.indices.contains(index) else { return }
+        if playing != nil { stopPlayback() }
+        sliderRunning[index] = false
+        submitSliders()
+    }
+
+    /// Only a running feature sends its level; a stopped one sends zero.
+    private func submitSliders() {
+        let targets = features.indices.map { sliderRunning[$0] ? sliderLevels[$0] : 0 }
+        // A rejected frame must never restore targets after Stop.
+        guard submitFrame(targets) else { return }
+        try? touchModel?.setVisualTargets(targets)
+        touchVersion += 1
+        displayValues = touchModel?.visualTargets() ?? targets
+        captureGesture()
+        updateHaptics()
+    }
+
     // MARK: - Spellbook
 
     var canPerformSpell: Bool { canControl }
@@ -376,7 +437,10 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     private func captureGesture() {
         guard let recording, let touchModel else { return }
         var touching = 0
-        for point in 0..<touchModel.size where touchModel.isPointActive(point) { touching |= 1 << point }
+        for point in 0..<touchModel.size
+        where touchModel.isPointActive(point) || (sliderMode && sliderRunning.indices.contains(point) && sliderRunning[point]) {
+            touching |= 1 << point
+        }
         let accepted = (try? recording.add(now: now(), values: touchModel.visualTargets(), touching: touching)) ?? false
         if !accepted { finishRecording() }
     }
@@ -418,6 +482,8 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         touchModel?.clear()
         lastSubmitted = nil
         hold = false
+        sliderLevels = Array(repeating: 0, count: features.count)
+        sliderRunning = Array(repeating: false, count: features.count)
         touchVersion += 1
         displayValues = Array(repeating: 0, count: features.count)
         haptics.stop()

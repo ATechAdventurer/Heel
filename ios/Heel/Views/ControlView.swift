@@ -10,6 +10,11 @@ struct ControlView: View {
     @State private var showingSpellbook = false
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
+    @Environment(\.accessibilitySwitchControlEnabled) private var switchControl
+
+    /// Neither can drag a paw across the touch pad, so each feature gets a slider instead.
+    private var needsSliders: Bool { voiceOver || switchControl }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -31,6 +36,13 @@ struct ControlView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 12)
 
+            if model.sliderMode {
+                sliderPanel
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+            }
+
+            // Stays mounted in slider mode: the pad owns the TouchModel the view model mirrors into.
             TouchPad(
                 features: model.features,
                 dark: colorScheme == .dark,
@@ -40,14 +52,19 @@ struct ControlView: View {
                 onCancelRequested: { model.touchCancelled() },
                 bind: { model.bindTouchModel($0) }
             )
-            .frame(maxHeight: .infinity)
+            .frame(maxHeight: model.sliderMode ? 0 : .infinity)
+            .opacity(model.sliderMode ? 0 : 1)
+            .allowsHitTesting(!model.sliderMode)
+            .accessibilityHidden(model.sliderMode)
             .padding(.horizontal, 24)
-            .padding(.top, 12)
+            .padding(.top, model.sliderMode ? 0 : 12)
             .accessibilityLabel(model.hold ? "Touch pad. Drag a paw to adjust. Lift to keep." : "Touch pad. Drag a paw up or down. Lift to stop.")
 
-            holdToggle
-                .padding(.horizontal, 24)
-                .padding(.top, 12)
+            if !model.sliderMode {
+                holdToggle
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+            }
 
             hapticsToggle
                 .padding(.horizontal, 24)
@@ -62,7 +79,9 @@ struct ControlView: View {
         .onAppear {
             model.onReturnToPick = onReturnToPick
             model.onAppear()
+            model.setSliderMode(needsSliders)
         }
+        .onChange(of: needsSliders) { model.setSliderMode($0) }
         .onDisappear { model.onDisappear() }
         .confirmationDialog("Settings", isPresented: $showingSettings, titleVisibility: .visible) {
             Button("Reset role choice") { showingResetConfirm = true }
@@ -178,6 +197,70 @@ struct ControlView: View {
         }
         .opacity(model.features.isEmpty ? 0 : 1)
         .frame(height: model.features.isEmpty ? 0 : nil)
+    }
+
+    private var sliderPanel: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                if model.features.isEmpty {
+                    Text("No vibration controls yet.")
+                        .font(Nunito.font(size: 14, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                        .foregroundStyle(Color("AppMuted"))
+                }
+                ForEach(Array(model.features.enumerated()), id: \.offset) { index, feature in
+                    sliderRow(index, feature)
+                }
+                Text("Choose a level, then Start. Adjustments are live while running.")
+                    .font(Nunito.font(size: 12, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                    .foregroundStyle(Color("AppMuted"))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    private func sliderRow(_ index: Int, _ feature: TouchModel.Feature) -> some View {
+        let level = model.sliderLevels.indices.contains(index) ? model.sliderLevels[index] : 0
+        let running = model.sliderRunning.indices.contains(index) && model.sliderRunning[index]
+        let controllable = model.canControl
+        return VStack(alignment: .leading, spacing: 8) {
+            Text("\(index + 1) · \(feature.label)")
+                .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
+                .foregroundStyle(index == 0 ? Color("AppAccent") : Color("AppForeground"))
+            Text("Level: \(ControlView.formatPercent(level)) · \(running ? "Running" : "Rest")")
+                .font(Nunito.font(size: 13, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                .foregroundStyle(Color("AppMuted"))
+            Slider(value: Binding(get: { level }, set: { model.setSliderLevel(index, $0) }),
+                   in: 0...1, step: ControlViewModel.sliderStep(for: feature))
+                .tint(Color("AppAccent"))
+                .frame(minHeight: 44)
+                .disabled(!controllable)
+                .accessibilityLabel("\(feature.label) level")
+                .accessibilityValue("\(Int((level * 100).rounded())) percent, \(running ? "running" : "stopped")")
+            HStack(spacing: 12) {
+                sliderButton("Start \(index + 1)", label: "Start \(feature.label)", filled: true,
+                             enabled: controllable && !running) { model.startSlider(index) }
+                sliderButton("Stop \(index + 1)", label: "Stop \(feature.label)", filled: false,
+                             enabled: controllable && running) { model.stopSlider(index) }
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color("CardSurface")))
+    }
+
+    private func sliderButton(_ title: String, label: String, filled: Bool, enabled: Bool,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
+                .foregroundStyle(filled ? .white : Color("AppAccent"))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 18)
+                    .fill(filled ? Color("AppAccent") : Color("PairingSurface")))
+                .opacity(enabled ? 1 : 0.4)
+        }
+        .disabled(!enabled)
+        .accessibilityLabel(label)
     }
 
     private var holdToggle: some View {
