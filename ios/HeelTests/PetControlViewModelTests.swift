@@ -1,29 +1,6 @@
 import XCTest
 @testable import Heel
 
-@MainActor
-private final class FakeRelay: PetRelay {
-    var connected = true
-    var sent: [JSONDictionary] = []
-    var calls: [String] = []
-
-    func attach(_ value: RelayListener) {}
-    func detach(_ value: RelayListener) {}
-    func send(_ message: JSONDictionary) -> Bool {
-        sent.append(message)
-        return connected
-    }
-    func pause() { calls.append("pause") }
-    func stop() { calls.append("stop") }
-    func safeWord() { calls.append("safeword") }
-    func clearSafeWordForReady() { calls.append("clearSafeWord") }
-    func blockRetries(_ blocked: Bool) { calls.append("blockRetries(\(blocked))") }
-    func connect(enrollment: String?) { calls.append("connect") }
-    func disconnect(reason: String) { calls.append("disconnect") }
-
-    func sent(_ type: String) -> [JSONDictionary] { sent.filter { $0.optString("type") == type } }
-}
-
 private final class FakeEngine: NativeEngine {
     var submitted: [JSONDictionary] = []
     var events: [JSONDictionary] = []
@@ -261,5 +238,45 @@ final class PetControlViewModelTests: XCTestCase {
         engine.submitted = []
         model.toggleScan()
         XCTAssertEqual(engine.submitted.map { $0.optString("type") }, ["resume", "scan"])
+    }
+
+    func testPairSummaryAndDeviceSummary() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        var paired = state("e1")
+        paired["profile"] = ["owner": "Sam", "pet": "Mia", "species": "fox"]
+        model.relayReceived(paired)
+        XCTAssertEqual(model.pairSummary, "Sam + Mia · fox")
+        XCTAssertEqual(model.deviceSummary, "No toy connected")
+    }
+
+    func testOpeningDetailsPausesAnActiveSession() {
+        startSession()
+        model.openDetails()
+        XCTAssertFalse(model.sessionActive)
+        XCTAssertEqual(relay.calls.last, "pause")
+    }
+
+    func testUnpairStopsOutputThenAsksTheRelayToUnpair() {
+        startSession()
+        model.unpairAndReset()
+        XCTAssertFalse(model.sessionActive)
+        XCTAssertEqual(relay.calls.last, "stop")
+        XCTAssertEqual(relay.sent.last?.optString("type"), "unpair")
+        XCTAssertNil(model.resetError)
+    }
+
+    func testUnpairWhileOfflineExplainsInsteadOfLeaving() {
+        model.relayConnectionChanged(connected: false, reason: "Offline")
+        model.unpairAndReset()
+        XCTAssertNotNil(model.resetError)
+        XCTAssertTrue(relay.sent("unpair").isEmpty)
+    }
+
+    func testRelayConfirmingUnpairedReturnsToPick() {
+        startSession()
+        var returned = false
+        model.onReturnToPick = { returned = true }
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertTrue(returned)
     }
 }

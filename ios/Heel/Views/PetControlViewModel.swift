@@ -27,6 +27,7 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published private(set) var levels: [Double] = []
     @Published private(set) var hold = false
     @Published private(set) var safeWordLatched: Bool
+    @Published var resetError: String?
 
     private var stopping = false
     private var advertised = "null"
@@ -187,6 +188,33 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     }
 
     var sessionActive: Bool { gate.active() }
+
+    /// "Sam + Mia · fox" for the Pair & device sheet, mirroring Android's showPairDetails.
+    var pairSummary: String {
+        guard let profile = relayState.optDictionary("profile") else { return "Your pair" }
+        let species = profile.optString("species")
+        return "\(profile.optString("owner")) + \(profile.optString("pet"))" + (species.isEmpty ? "" : " · \(species)")
+    }
+
+    var deviceSummary: String { selected?.name ?? "No toy connected" }
+
+    /// Opening the details pauses output, as on Android, so nothing runs behind a dialog.
+    func openDetails() {
+        if gate.active() || gate.pending() { pause(temporary: true) }
+    }
+
+    /// Ends the pair on the relay too, so Pick isn't reached with a pair still standing.
+    /// Navigation happens when the relay confirms "unpaired" (see handleState).
+    func unpairAndReset() {
+        guard relayOnline else {
+            resetError = "Reconnect first so Heel can unpair before changing roles."
+            return
+        }
+        pause(temporary: false)
+        if !relay.send(RelayClient.json("unpair")) {
+            resetError = "Reconnect to reset the role."
+        }
+    }
 
     private var resumable: Bool {
         relayState.optBool("resumeAllowed") && !relayState.optBool("safeWord") && gate.canRecover()

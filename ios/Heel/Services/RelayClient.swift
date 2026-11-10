@@ -5,20 +5,29 @@ protocol RelayListener: AnyObject {
     func relayConnectionChanged(connected: Bool, reason: String)
 }
 
-/// The slice of RelayClient that Pet's session authority drives, so it can be exercised
+/// The slice of RelayClient both roles' session logic drives, so it can be exercised
 /// without a socket.
 @MainActor
-protocol PetRelay: AnyObject {
+protocol SessionRelay: AnyObject {
     var connected: Bool { get }
     func attach(_ value: RelayListener)
     func detach(_ value: RelayListener)
     @discardableResult func send(_ message: JSONDictionary) -> Bool
-    func pause()
     func stop()
+    func connect(enrollment: String?)
+}
+
+@MainActor
+protocol OwnerRelay: SessionRelay {
+    func frame(_ value: JSONDictionary, priorityZero: Bool)
+}
+
+@MainActor
+protocol PetRelay: SessionRelay {
+    func pause()
     func safeWord()
     func clearSafeWordForReady()
     func blockRetries(_ blocked: Bool)
-    func connect(enrollment: String?)
     func disconnect(reason: String)
 }
 
@@ -391,7 +400,7 @@ final class RelayClient: NSObject {
     }
 }
 
-extension RelayClient: PetRelay {}
+extension RelayClient: OwnerRelay, PetRelay {}
 
 extension RelayClient: URLSessionWebSocketDelegate {
     nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
