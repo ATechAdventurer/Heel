@@ -5,6 +5,8 @@ import SwiftUI
 struct PetControlView: View {
     @StateObject private var model = PetControlViewModel()
     let onReturnToPick: () -> Void
+    @State private var showingDetails = false
+    @State private var showingUnpairConfirm = false
     @Environment(\.sizeCategory) private var sizeCategory
 
     var body: some View {
@@ -64,6 +66,23 @@ struct PetControlView: View {
             model.onAppear()
         }
         .onDisappear { model.onDisappear() }
+        .confirmationDialog("Pair & device", isPresented: $showingDetails, titleVisibility: .visible) {
+            Button("Unpair", role: .destructive) { showingUnpairConfirm = true }
+            Button("Close", role: .cancel) {}
+        } message: {
+            Text("\(model.pairSummary)\n\(model.deviceSummary)")
+        }
+        .alert("Unpair these phones?", isPresented: $showingUnpairConfirm) {
+            Button("Keep pair", role: .cancel) {}
+            Button("Unpair", role: .destructive) { model.unpairAndReset() }
+        } message: {
+            Text("Remote control will stop. You can pair again with a new invitation.")
+        }
+        .alert("Couldn’t unpair", isPresented: Binding(get: { model.resetError != nil }, set: { if !$0 { model.resetError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.resetError ?? "")
+        }
     }
 
     private var sticker: String {
@@ -72,9 +91,16 @@ struct PetControlView: View {
 
     private var header: some View {
         HStack {
-            Text("heel")
-                .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
-                .foregroundStyle(Color("AppAccent"))
+            Button {
+                model.openDetails()
+                showingDetails = true
+            } label: {
+                Text("heel")
+                    .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
+                    .foregroundStyle(Color("AppAccent"))
+            }
+            .frame(minHeight: 44)
+            .accessibilityLabel("Pair and device details")
             Spacer()
         }
         .frame(minHeight: 48)

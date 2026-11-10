@@ -5,7 +5,7 @@ import Foundation
 /// ControlRuntime, with Pet-only device discovery/recovery left out.
 @MainActor
 final class ControlViewModel: NSObject, ObservableObject, RelayListener {
-    private let relay: RelayClient
+    private let relay: OwnerRelay
     private let gate = SessionGate(pet: false)
     private let haptics: OwnerHaptics
     private let spellbook: SpellBook
@@ -29,6 +29,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published private(set) var pendingSpellDraft = false
     @Published private(set) var playingSpellName: String?
     @Published var spellError: String?
+    @Published var resetError: String?
 
     private var outgoingSequence: Int64 = 0
     private var lastSubmitted: [Double]?
@@ -44,7 +45,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     private var playbackEpoch = ""
     private var playbackGeneration = 0
 
-    init(relay: RelayClient = .shared, haptics: OwnerHaptics? = nil, spellbook: SpellBook = SpellBook(),
+    init(relay: OwnerRelay = RelayClient.shared, haptics: OwnerHaptics? = nil, spellbook: SpellBook = SpellBook(),
          now: @escaping () -> Int64 = { Int64(DispatchTime.now().uptimeNanoseconds / 1_000_000) },
          schedule: @escaping (TimeInterval, @escaping () -> Void) -> Void = { delay, work in
              DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
@@ -57,8 +58,10 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     }
 
     func onAppear() {
+        // attach replays the current state; clearing after it would leave Owner unable to
+        // send until the relay's next state change.
+        relayState = [:]
         relay.attach(self)
-        if relay.connected { relayState = [:] }
         spells = spellbook.all()
     }
 
@@ -250,6 +253,19 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         gate.stop()
         resetLocal()
         relay.stop()
+    }
+
+    /// Ends the pair on the relay too, so Pick isn't reached with a pair still standing.
+    /// Navigation happens when the relay confirms "unpaired" (see handleState).
+    func unpairAndReset() {
+        guard relayOnline else {
+            resetError = "Reconnect first so Heel can unpair before changing roles."
+            return
+        }
+        stopAll()
+        if !relay.send(RelayClient.json("unpair")) {
+            resetError = "Reconnect to reset the role."
+        }
     }
 
     func setHold(_ enabled: Bool) {

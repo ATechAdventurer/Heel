@@ -59,7 +59,10 @@ struct ControlView: View {
                 .padding(.bottom, 16)
         }
         .background(Color("AppBackground"))
-        .onAppear { model.onAppear() }
+        .onAppear {
+            model.onReturnToPick = onReturnToPick
+            model.onAppear()
+        }
         .onDisappear { model.onDisappear() }
         .confirmationDialog("Settings", isPresented: $showingSettings, titleVisibility: .visible) {
             Button("Reset role choice") { showingResetConfirm = true }
@@ -67,12 +70,14 @@ struct ControlView: View {
         }
         .alert("Unpair and choose again?", isPresented: $showingResetConfirm) {
             Button("Keep role", role: .cancel) {}
-            Button("Unpair & reset", role: .destructive) {
-                model.stopAll()
-                onReturnToPick()
-            }
+            Button("Unpair & reset", role: .destructive) { model.unpairAndReset() }
         } message: {
             Text("This stops the session and returns to Pick. This phone's setup identity is kept, so you won't need another setup code.")
+        }
+        .alert("Couldn’t unpair", isPresented: Binding(get: { model.resetError != nil }, set: { if !$0 { model.resetError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(model.resetError ?? "")
         }
         .alert("Spellbook", isPresented: Binding(get: { model.spellError != nil }, set: { if !$0 { model.spellError = nil } })) {
             Button("OK", role: .cancel) {}
