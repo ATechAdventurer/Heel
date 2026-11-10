@@ -71,16 +71,22 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
         pairedPet && initialized && ready && !stopping && selected != nil
     }
 
-    func onAppear() {
+    /// Becomes the relay's app-wide listener, so the engine, session and device keep running
+    /// whichever screen is showing. SessionRuntime calls this when Pet's role is paired.
+    func activate(onReturnToPick: @escaping () -> Void) {
+        self.onReturnToPick = onReturnToPick
         relay.blockRetries(safeWordLatched)
-        // attach replays the current state; Pet needs it to advertise its device at all.
-        relay.attach(self)
+        // setController replays the current state; Pet needs it to start the engine and
+        // advertise its device at all.
+        relay.setController(self)
     }
 
-    /// Leaving this screen must not leave a toy running behind it.
-    func onDisappear() {
+    /// Leaving Pet's role stops output and shuts the engine down, including its poll loop.
+    func deactivate() {
         if gate.active() || gate.pending() { pause(temporary: false) }
-        relay.detach(self)
+        reset()
+        relay.setController(nil)
+        onReturnToPick = nil
     }
 
     // MARK: - RelayListener

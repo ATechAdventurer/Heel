@@ -35,9 +35,9 @@ final class ControlViewModelTests: XCTestCase {
         relay.frames.map { ($0["values"] as? [Double]) ?? [] }
     }
 
-    func testReopeningTheScreenKeepsTheStateTheRelayReplays() {
+    func testActivatingKeepsTheStateTheRelayReplays() {
         relay.state = ownerState("e1", ready: true)
-        model.onAppear()
+        model.activate(onReturnToPick: {})
         XCTAssertEqual(model.relayState.optString("phase"), "paired")
         XCTAssertEqual(model.deviceName, "Hush")
         XCTAssertTrue(model.sessionActionEnabled, "Owner can start straight away when Pet is ready")
@@ -192,5 +192,36 @@ final class ControlViewModelTests: XCTestCase {
         startSession()
         model.relayReceived(resumedWithHold())
         XCTAssertTrue(relay.frames.isEmpty)
+    }
+
+    // MARK: - Screen lifecycle
+
+    func testHidingTheScreenPausesARunningSession() {
+        startSession()
+        model.screenDidDisappear()
+        XCTAssertFalse(model.sessionActive)
+        XCTAssertEqual(relay.calls.last, "pause", "A pause the session can resume from, not a stop")
+    }
+
+    func testHidingTheScreenWhileIdleSendsNothing() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        model.relayReceived(ownerState("e1", ready: true))
+        model.screenDidDisappear()
+        XCTAssertTrue(relay.calls.isEmpty)
+    }
+
+    func testDeactivatingReleasesTheRelayAndForgetsWhereToReturn() {
+        model.activate(onReturnToPick: {})
+        model.deactivate()
+        XCTAssertNil(relay.controller)
+        XCTAssertNil(model.onReturnToPick)
+    }
+
+    func testActivatingReturnsToPickWhenTheRelayReportsUnpaired() {
+        var returned = false
+        relay.state = ownerState("e1", ready: true)
+        model.activate(onReturnToPick: { returned = true })
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertTrue(returned)
     }
 }

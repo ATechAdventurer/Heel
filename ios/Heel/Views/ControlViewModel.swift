@@ -63,17 +63,41 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         self.schedule = schedule
     }
 
-    func onAppear() {
-        // attach replays the current state; clearing after it would leave Owner unable to
-        // send until the relay's next state change.
+    /// Becomes the relay's app-wide listener, so the session keeps running whichever screen is
+    /// showing. SessionRuntime calls this when Owner's role is paired.
+    func activate(onReturnToPick: @escaping () -> Void) {
+        self.onReturnToPick = onReturnToPick
+        // setController replays the current state; clearing after it would leave Owner unable
+        // to send until the relay's next state change.
         relayState = [:]
-        relay.attach(self)
+        relay.setController(self)
         spells = spellbook.all()
     }
 
-    func onDisappear() {
-        relay.detach(self)
+    /// Leaving Owner's role ends its session; nothing keeps running for a role no one is using.
+    func deactivate() {
+        if gate.active() || gate.pending() { stopAll() } else { resetLocal() }
         haptics.stop()
+        relay.setController(nil)
+        onReturnToPick = nil
+    }
+
+    func screenDidAppear() {
+        spells = spellbook.all()
+    }
+
+    /// The pad is gone, so nothing can release a held or touched level. Pause rather than leave
+    /// the pet's device running at whatever was last sent.
+    func screenDidDisappear() {
+        haptics.stop()
+        if gate.active() { pauseSession() } else { resetLocal() }
+    }
+
+    /// A pause the session can resume from, unlike stopAll.
+    private func pauseSession() {
+        gate.pause()
+        resetLocal()
+        relay.pause()
     }
 
     func setHapticsEnabled(_ enabled: Bool) {
@@ -314,11 +338,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     /// Switching input mode pauses a running session rather than carrying output across it.
     func setSliderMode(_ enabled: Bool) {
         guard enabled != sliderMode else { return }
-        if gate.active() {
-            gate.pause()
-            resetLocal()
-            relay.pause()
-        }
+        if gate.active() { pauseSession() }
         sliderMode = enabled
         resetLocal()
     }
