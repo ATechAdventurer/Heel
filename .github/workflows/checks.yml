@@ -9,7 +9,39 @@ concurrency:
 permissions:
   contents: read
 jobs:
+  # Each job only runs when something it builds from changed: its own directory, the shared
+  # Rust core for Android and iOS, or this workflow. Manual runs do everything.
+  changes:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      relay: ${{ steps.filter.outputs.relay }}
+      android: ${{ steps.filter.outputs.android }}
+      ios: ${{ steps.filter.outputs.ios }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name != 'workflow_dispatch'
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            relay:
+              - 'relay/**'
+              - '.github/workflows/checks.yml'
+            android:
+              - 'android/**'
+              - 'native/**'
+              - '.github/workflows/checks.yml'
+            ios:
+              - 'ios/**'
+              - 'native/**'
+              - '.github/workflows/checks.yml'
   relay:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.relay == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -34,6 +66,8 @@ jobs:
       - if: always()
         run: docker compose logs --tail=60; docker compose down
   android:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -70,6 +104,8 @@ jobs:
           name: Android-test-reports
           path: android/app/build/reports/
   ios:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.ios == 'true'
     runs-on: macos-15
     defaults:
       run:
