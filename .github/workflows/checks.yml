@@ -9,14 +9,15 @@ concurrency:
 permissions:
   contents: read
 jobs:
-  # Android and iOS are slow, so they only run when something they build from changed:
-  # their own directory, the shared Rust core, or this workflow. Manual runs do everything.
+  # Each job only runs when something it builds from changed: its own directory, the shared
+  # Rust core for Android and iOS, or this workflow. Manual runs do everything.
   changes:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
     outputs:
+      relay: ${{ steps.filter.outputs.relay }}
       android: ${{ steps.filter.outputs.android }}
       ios: ${{ steps.filter.outputs.ios }}
     steps:
@@ -27,6 +28,9 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         with:
           filters: |
+            relay:
+              - 'relay/**'
+              - '.github/workflows/checks.yml'
             android:
               - 'android/**'
               - 'native/**'
@@ -36,6 +40,8 @@ jobs:
               - 'native/**'
               - '.github/workflows/checks.yml'
   relay:
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.relay == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
