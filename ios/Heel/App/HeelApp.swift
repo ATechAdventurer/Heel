@@ -55,7 +55,7 @@ struct HeelApp: App {
                     path.removeAll()
                 })
             } else {
-                ControlPlaceholderView(role: role, onReturnToPick: {
+                PetControlView(onReturnToPick: {
                     RolePreferences.reset()
                     path.removeAll()
                 })

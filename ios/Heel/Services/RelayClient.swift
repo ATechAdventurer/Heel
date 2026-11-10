@@ -5,6 +5,23 @@ protocol RelayListener: AnyObject {
     func relayConnectionChanged(connected: Bool, reason: String)
 }
 
+/// The slice of RelayClient that Pet's session authority drives, so it can be exercised
+/// without a socket.
+@MainActor
+protocol PetRelay: AnyObject {
+    var connected: Bool { get }
+    func attach(_ value: RelayListener)
+    func detach(_ value: RelayListener)
+    @discardableResult func send(_ message: JSONDictionary) -> Bool
+    func pause()
+    func stop()
+    func safeWord()
+    func clearSafeWordForReady()
+    func blockRetries(_ blocked: Bool)
+    func connect(enrollment: String?)
+    func disconnect(reason: String)
+}
+
 /// Owns the relay socket. Retrying a transport never replays a control frame. Main-thread only,
 /// matching Android's Handler(mainLooper)-confined RelayClient.
 @MainActor
@@ -373,6 +390,8 @@ final class RelayClient: NSObject {
         return value
     }
 }
+
+extension RelayClient: PetRelay {}
 
 extension RelayClient: URLSessionWebSocketDelegate {
     nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
