@@ -224,4 +224,70 @@ final class ControlViewModelTests: XCTestCase {
         model.relayReceived(["type": "state", "phase": "unpaired"])
         XCTAssertTrue(returned)
     }
+
+    // MARK: - Pause, resume and keeping the screen awake
+
+    /// The relay starts a new epoch when it pauses a session.
+    private func pausedState() -> JSONDictionary {
+        var state = ownerState("e2")
+        state["paused"] = true
+        state["resumeAllowed"] = true
+        return state
+    }
+
+    func testAPausedSessionSaysSoAndOffersResume() {
+        startSession()
+        model.screenDidDisappear()
+        model.relayReceived(pausedState())
+        XCTAssertEqual(model.statusText, "Paused · resume when you like")
+        XCTAssertEqual(model.sessionActionTitle, "Resume ♡")
+    }
+
+    func testResumeSendsResumeForTheCurrentEpoch() {
+        startSession()
+        model.screenDidDisappear()
+        model.relayReceived(pausedState())
+        model.action()
+        XCTAssertEqual(relay.sent.last?.optString("type"), "resume")
+        XCTAssertEqual(relay.sent.last?.optString("epoch"), "e2")
+    }
+
+    func testBackgroundingPausesARunningSession() {
+        startSession()
+        model.appDidEnterBackground()
+        XCTAssertFalse(model.sessionActive)
+        XCTAssertEqual(relay.calls.last, "pause")
+    }
+
+    func testBackgroundingWhileIdleSendsNothing() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        model.relayReceived(ownerState("e1"))
+        model.appDidEnterBackground()
+        XCTAssertTrue(relay.calls.isEmpty)
+    }
+
+    func testScreenIsHeldAwakeForALiveSessionOrAReadyPetButNotOtherwise() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        model.relayReceived(ownerState("e1"))
+        XCTAssertFalse(model.keepsScreenAwake, "Nothing is happening")
+        model.relayReceived(ownerState("e1", ready: true))
+        XCTAssertTrue(model.keepsScreenAwake, "Pet is ready and waiting for Start")
+        model.action()
+        model.relayReceived(ownerState("e1", ready: true, active: true))
+        XCTAssertTrue(model.keepsScreenAwake)
+    }
+
+    func testAPausedSessionDoesNotPinTheScreenOn() {
+        startSession()
+        model.screenDidDisappear()
+        model.relayReceived(pausedState())
+        XCTAssertTrue(model.sessionActionEnabled, "It can still be resumed")
+        XCTAssertFalse(model.keepsScreenAwake)
+    }
+
+    func testScreenIsNotHeldAwakeOffline() {
+        startSession()
+        model.relayConnectionChanged(connected: false, reason: "Offline")
+        XCTAssertFalse(model.keepsScreenAwake)
+    }
 }

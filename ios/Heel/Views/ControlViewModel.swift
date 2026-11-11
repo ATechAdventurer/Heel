@@ -89,6 +89,16 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     /// The pad is gone, so nothing can release a held or touched level. Pause rather than leave
     /// the pet's device running at whatever was last sent.
     func screenDidDisappear() {
+        stopForInterruption()
+    }
+
+    /// iOS suspends the app, and with it the relay socket, within seconds of backgrounding.
+    /// Pausing now tells the pet's phone why, and a resume stays one tap away.
+    func appDidEnterBackground() {
+        stopForInterruption()
+    }
+
+    private func stopForInterruption() {
         haptics.stop()
         if gate.active() { pauseSession() } else { resetLocal() }
     }
@@ -254,25 +264,39 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         guard relayOnline else { return "Reconnecting…" }
         guard relayState.optBool("online") else { return "Waiting for your pet…" }
         if gate.active() { return "Together ♡" }
+        if relayState.optBool("paused") { return "Paused · resume when you like" }
         if relayState.optBool("ready") { return "Your pet is ready" }
         return "Ready when you are"
     }
 
+    /// Pause leaves the session resumable; the button must say so rather than "Start".
+    private var resumable: Bool {
+        relayState.optBool("resumeAllowed") && !relayState.optBool("safeWord") && gate.canRecover()
+    }
+
     var sessionActionTitle: String {
-        !relayOnline ? "Reconnect" : gate.active() ? "Together ♡" : gate.pending() ? "One moment…" : "Start"
+        !relayOnline ? "Reconnect" : gate.active() ? "Together ♡" : gate.pending() ? "One moment…"
+            : resumable ? "Resume ♡" : "Start"
+    }
+
+    /// A session is live, starting, or one tap from starting, so the phone must not lock under it.
+    /// Unlike Android's wake lock this ignores a merely resumable session: that clause exists to
+    /// reconnect in the background, which iOS can't do, and here it would pin the screen on forever
+    /// after a pause.
+    var keepsScreenAwake: Bool {
+        relayOnline && (gate.active() || gate.pending() || relayState.optBool("ready"))
     }
 
     var sessionActionEnabled: Bool {
         guard relayOnline else { return true }
         let online = relayState.optBool("online")
-        let resumable = relayState.optBool("resumeAllowed") && !relayState.optBool("safeWord") && gate.canRecover()
         return online && !gate.active() && gate.mayRequest() && (resumable || relayState.optBool("ready"))
     }
 
     func action() {
         guard relayOnline else { relay.connect(enrollment: nil); return }
         guard !gate.active(), gate.mayRequest() else { return }
-        if relayState.optBool("resumeAllowed") && !relayState.optBool("safeWord") && gate.canRecover() {
+        if resumable {
             relay.send(RelayClient.json("resume", ["epoch": gate.epoch]))
             return
         }

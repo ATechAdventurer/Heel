@@ -12,6 +12,7 @@ enum AppRoute: Hashable {
 struct HeelApp: App {
     @State private var path: [AppRoute]
     private let runtime = SessionRuntime.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         if let role = RolePreferences.get() {
@@ -33,6 +34,10 @@ struct HeelApp: App {
                     destination(for: route)
                         .toolbar(.hidden, for: .navigationBar)
                 }
+            }
+            // .inactive (Control Center, a notification peek) is not leaving; .background is.
+            .onChange(of: scenePhase) { phase in
+                if phase == .background { runtime.appDidEnterBackground() }
             }
             // Leaving the paired screen by any route (Back to Pick, an edge swipe, unpairing)
             // ends the live session; staying inside it never does.
