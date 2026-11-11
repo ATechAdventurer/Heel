@@ -1,40 +1,6 @@
 import XCTest
 @testable import Heel
 
-private final class FakeEngine: NativeEngine {
-    var submitted: [JSONDictionary] = []
-    var events: [JSONDictionary] = []
-
-    func initialize() -> String { "" }
-    func submit(_ command: String) -> String {
-        submitted.append((try? JSONSerialization.jsonObject(with: Data(command.utf8))) as? JSONDictionary ?? [:])
-        return ""
-    }
-    func drain() -> String {
-        defer { events = [] }
-        let data = try? JSONSerialization.data(withJSONObject: events)
-        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
-    }
-
-    func submitted(_ type: String) -> [JSONDictionary] { submitted.filter { $0.optString("type") == type } }
-}
-
-/// Runs scheduled work by hand. The engine poll reschedules itself, so each tick runs only
-/// what was queued before it.
-private final class ManualScheduler {
-    private var queue: [(TimeInterval, () -> Void)] = []
-
-    var schedule: (TimeInterval, @escaping () -> Void) -> Void {
-        { [unowned self] delay, work in self.queue.append((delay, work)) }
-    }
-
-    func tick(where matches: (TimeInterval) -> Bool = { _ in true }) {
-        let due = queue.filter { matches($0.0) }
-        queue = queue.filter { !matches($0.0) }
-        due.forEach { $0.1() }
-    }
-}
-
 @MainActor
 final class PetControlViewModelTests: XCTestCase {
     private var relay: FakeRelay!

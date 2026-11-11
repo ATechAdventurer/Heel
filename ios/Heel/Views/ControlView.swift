@@ -3,8 +3,8 @@ import SwiftUI
 /// Owner's live control screen: touch pad, session start/stop, and per-feature readouts.
 /// Pet role uses PetControlView instead.
 struct ControlView: View {
-    @StateObject private var model = ControlViewModel()
-    let onReturnToPick: () -> Void
+    /// Owned by SessionRuntime, not this view, so the session outlives the screen.
+    @ObservedObject var model: ControlViewModel
     @State private var showingSettings = false
     @State private var showingResetConfirm = false
     @State private var showingSpellbook = false
@@ -77,12 +77,11 @@ struct ControlView: View {
         }
         .background(Color("AppBackground"))
         .onAppear {
-            model.onReturnToPick = onReturnToPick
-            model.onAppear()
+            model.screenDidAppear()
             model.setSliderMode(needsSliders)
         }
         .onChange(of: needsSliders) { model.setSliderMode($0) }
-        .onDisappear { model.onDisappear() }
+        .onDisappear { model.screenDidDisappear() }
         .confirmationDialog("Settings", isPresented: $showingSettings, titleVisibility: .visible) {
             Button("Reset role choice") { showingResetConfirm = true }
             Button("Close", role: .cancel) {}
@@ -304,5 +303,5 @@ struct ControlView: View {
 }
 
 #Preview {
-    ControlView(onReturnToPick: {})
+    ControlView(model: ControlViewModel())
 }

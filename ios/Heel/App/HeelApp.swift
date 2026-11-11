@@ -11,6 +11,7 @@ enum AppRoute: Hashable {
 @main
 struct HeelApp: App {
     @State private var path: [AppRoute]
+    private let runtime = SessionRuntime.shared
 
     init() {
         if let role = RolePreferences.get() {
@@ -33,7 +34,19 @@ struct HeelApp: App {
                         .toolbar(.hidden, for: .navigationBar)
                 }
             }
+            // Leaving the paired screen by any route (Back to Pick, an edge swipe, unpairing)
+            // ends the live session; staying inside it never does.
+            .onChange(of: path) { path in
+                if !path.contains(where: { if case .paired = $0 { return true } else { return false } }) {
+                    runtime.deactivate()
+                }
+            }
         }
+    }
+
+    private func returnToPick() {
+        RolePreferences.reset()
+        path.removeAll()
     }
 
     @ViewBuilder
@@ -44,22 +57,16 @@ struct HeelApp: App {
                 RolePreferences.choose(paired)
                 if !path.isEmpty { path[path.count - 1] = .paired(paired) }
                 else { path.append(.paired(paired)) }
-            }, onReturnToPick: {
-                RolePreferences.reset()
-                path.removeAll()
-            })
+            }, onReturnToPick: { returnToPick() })
         case .paired(let role):
-            if role == .owner {
-                ControlView(onReturnToPick: {
-                    RolePreferences.reset()
-                    path.removeAll()
-                })
-            } else {
-                PetControlView(onReturnToPick: {
-                    RolePreferences.reset()
-                    path.removeAll()
-                })
+            Group {
+                if role == .owner {
+                    ControlView(model: runtime.owner)
+                } else {
+                    PetControlView(model: runtime.pet, onReturnToPick: { returnToPick() })
+                }
             }
+            .onAppear { runtime.activate(role) { returnToPick() } }
         }
     }
 }

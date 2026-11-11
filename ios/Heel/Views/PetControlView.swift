@@ -3,7 +3,8 @@ import SwiftUI
 /// Pet's screen: find the device over Bluetooth, choose Ready, then follow Owner's levels.
 /// Pause and the Safe Word slider are always within reach once paired.
 struct PetControlView: View {
-    @StateObject private var model = PetControlViewModel()
+    /// Owned by SessionRuntime, not this view, so the session outlives the screen.
+    @ObservedObject var model: PetControlViewModel
     let onReturnToPick: () -> Void
     @State private var showingDetails = false
     @State private var showingUnpairConfirm = false
@@ -61,11 +62,6 @@ struct PetControlView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color("AppBackground"))
-        .onAppear {
-            model.onReturnToPick = onReturnToPick
-            model.onAppear()
-        }
-        .onDisappear { model.onDisappear() }
         .confirmationDialog("Pair & device", isPresented: $showingDetails, titleVisibility: .visible) {
             Button("Unpair", role: .destructive) { showingUnpairConfirm = true }
             Button("Close", role: .cancel) {}
@@ -272,5 +268,5 @@ struct SafeWordSlider: View {
 }
 
 #Preview {
-    PetControlView(onReturnToPick: {})
+    PetControlView(model: PetControlViewModel(), onReturnToPick: {})
 }

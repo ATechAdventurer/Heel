@@ -10,8 +10,8 @@ protocol RelayListener: AnyObject {
 @MainActor
 protocol SessionRelay: AnyObject {
     var connected: Bool { get }
-    func attach(_ value: RelayListener)
-    func detach(_ value: RelayListener)
+    /// The app-wide listener: it keeps receiving while no screen is showing.
+    func setController(_ value: RelayListener?)
     @discardableResult func send(_ message: JSONDictionary) -> Bool
     func pause()
     func stop()
