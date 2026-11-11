@@ -36,6 +36,10 @@ struct PetControlView: View {
                         sessionButton
                     }
 
+                    if model.recoveringDevice {
+                        stopLookingButton
+                    }
+
                     deviceList
                     scanButton
                 }
@@ -120,6 +124,20 @@ struct PetControlView: View {
             .accessibilityHint(model.actionEnabled ? "" : "Choose a device first, with both phones online")
     }
 
+    /// A toy that isn't coming back shouldn't leave Pet stuck searching with no way out.
+    private var stopLookingButton: some View {
+        Button {
+            model.stopLookingForDevice()
+        } label: {
+            Text("Stop looking for this toy")
+                .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
+                .foregroundStyle(Color("AppAccent"))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .background(RoundedRectangle(cornerRadius: 18).fill(Color("PairingSurface")))
+        }
+        .accessibilityHint("Gives up on it so you can choose a different device.")
+    }
+
     private var pauseButton: some View {
         Button {
             model.pause(temporary: true)
@@ -156,9 +174,9 @@ struct PetControlView: View {
 
     @ViewBuilder
     private var deviceList: some View {
-        if !model.devices.isEmpty {
+        if !model.displayDevices.isEmpty {
             VStack(spacing: 8) {
-                ForEach(model.devices, id: \.id) { device in
+                ForEach(model.displayDevices, id: \.id) { device in
                     let isSelected = model.selected?.id == device.id
                     Button {
                         model.select(isSelected ? nil : device)
