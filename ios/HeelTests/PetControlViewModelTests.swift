@@ -245,4 +245,35 @@ final class PetControlViewModelTests: XCTestCase {
         model.relayReceived(["type": "state", "phase": "unpaired"])
         XCTAssertTrue(returned)
     }
+
+    func testBackgroundingPausesTheSessionAndStopsTheDevice() {
+        startSession()
+        model.appDidEnterBackground()
+        XCTAssertFalse(model.sessionActive)
+        XCTAssertEqual(relay.calls.last, "pause", "A pause the session can resume from, not a stop")
+        XCTAssertEqual(engine.submitted.last?.optString("type"), "stop")
+    }
+
+    func testBackgroundingWhileIdleDoesNothing() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        model.relayReceived(state("e1"))
+        model.appDidEnterBackground()
+        XCTAssertFalse(relay.calls.contains("pause"))
+    }
+
+    func testScreenIsHeldAwakeWhileASessionIsLiveOrOwnerIsWaiting() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        model.relayReceived(state("e1"))
+        XCTAssertFalse(model.keepsScreenAwake)
+        model.relayReceived(state("e1", ready: true))
+        XCTAssertTrue(model.keepsScreenAwake, "Ready and waiting for Owner to start")
+    }
+
+    func testScreenIsReleasedAfterSafeWord() {
+        startSession()
+        XCTAssertTrue(model.keepsScreenAwake)
+        model.safeWord()
+        model.relayReceived(state("e3", safeWord: true))
+        XCTAssertFalse(model.keepsScreenAwake)
+    }
 }

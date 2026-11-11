@@ -29,6 +29,13 @@ struct PetControlView: View {
                         .accessibilityAddTraits(.updatesFrequently)
                         .padding(.horizontal, 8)
 
+                    if model.keepsScreenAwake {
+                        Text("Keep Heel open. The session pauses if you leave the app.")
+                            .font(Nunito.font(size: 12, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                            .foregroundStyle(Color("AppMuted"))
+                            .multilineTextAlignment(.center)
+                    }
+
                     if model.sessionActive {
                         readouts
                         pauseButton

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// The one app-wide owner of the live session, mirroring Android's ControlRuntime. Screens
@@ -20,10 +21,16 @@ final class SessionRuntime {
 
     private(set) var role: Role?
 
+    private let screen: ScreenWake
+    private var observation: AnyCancellable?
+    private var keepingAwake = false
+
     init(owner: @escaping @MainActor () -> ControlViewModel = { ControlViewModel() },
-         pet: @escaping @MainActor () -> PetControlViewModel = { PetControlViewModel() }) {
+         pet: @escaping @MainActor () -> PetControlViewModel = { PetControlViewModel() },
+         screen: ScreenWake? = nil) {
         makeOwner = owner
         makePet = pet
+        self.screen = screen ?? UIKitScreenWake()
     }
 
     /// Makes `role` the live session. Asking for the role that's already active only refreshes
@@ -38,19 +45,54 @@ final class SessionRuntime {
         }
         deactivate()
         self.role = role
+        // Watch the active model so the screen stays awake exactly while a session needs it.
+        // objectWillChange fires before the change lands, so look at it on the next turn.
         switch role {
-        case .owner: owner.activate(onReturnToPick: onReturnToPick)
-        case .pet: pet.activate(onReturnToPick: onReturnToPick)
+        case .owner:
+            observation = owner.objectWillChange.receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshScreenWake() }
+            owner.activate(onReturnToPick: onReturnToPick)
+        case .pet:
+            observation = pet.objectWillChange.receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshScreenWake() }
+            pet.activate(onReturnToPick: onReturnToPick)
         }
+        refreshScreenWake()
     }
 
     /// Ends whichever session is live. Safe to call when none is.
     func deactivate() {
         guard let active = role else { return }
         role = nil
+        observation = nil
         switch active {
         case .owner: owner.deactivate()
         case .pet: pet.deactivate()
         }
+        refreshScreenWake()
+    }
+
+    /// Called when the app moves to the background. A live session pauses instead of being
+    /// left to time out when iOS suspends the app.
+    func appDidEnterBackground() {
+        switch role {
+        case .owner: owner.appDidEnterBackground()
+        case .pet: pet.appDidEnterBackground()
+        case nil: break
+        }
+        refreshScreenWake()
+    }
+
+    /// Only touches the display setting when the answer actually changes.
+    func refreshScreenWake() {
+        let wanted: Bool
+        switch role {
+        case .owner: wanted = owner.keepsScreenAwake
+        case .pet: wanted = pet.keepsScreenAwake
+        case nil: wanted = false
+        }
+        guard wanted != keepingAwake else { return }
+        keepingAwake = wanted
+        screen.setKeepAwake(wanted)
     }
 }

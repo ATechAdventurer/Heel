@@ -279,6 +279,20 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
         return devices + [target]
     }
 
+    /// A session is live, starting, or waiting on Owner, so the phone must not lock under it.
+    /// Unlike Android's wake lock this ignores a merely resumable session: that clause exists to
+    /// reconnect in the background, which iOS can't do, and here it would pin the screen on forever
+    /// after a pause.
+    var keepsScreenAwake: Bool {
+        relayOnline && (gate.active() || gate.pending() || relayState.optBool("ready"))
+    }
+
+    /// iOS suspends the app, and with it the relay socket, within seconds of backgrounding.
+    /// Pausing now stops the toy for certain and tells Owner's phone why; Resume stays one tap away.
+    func appDidEnterBackground() {
+        if gate.active() { pause(temporary: true) }
+    }
+
     func action() {
         errorMessage = nil
         defer { objectWillChange.send() }

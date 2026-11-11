@@ -28,6 +28,10 @@ struct ControlView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 6)
 
+            awakeNote
+                .padding(.horizontal, 24)
+                .padding(.top, 4)
+
             creativeCaption
                 .padding(.horizontal, 24)
                 .padding(.top, 4)
@@ -138,6 +142,17 @@ struct ControlView: View {
         .frame(minHeight: 48)
         .padding(.horizontal, 24)
         .padding(.top, 20)
+    }
+
+    /// iOS can't keep a session alive in the background, so say so while one could be running.
+    @ViewBuilder
+    private var awakeNote: some View {
+        if model.keepsScreenAwake {
+            Text("Keep Heel open. The session pauses if you leave the app.")
+                .font(Nunito.font(size: 12, weight: 500, relativeTo: .footnote, category: sizeCategory))
+                .foregroundStyle(Color("AppMuted"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     @ViewBuilder

@@ -73,3 +73,15 @@ final class ManualScheduler {
     }
 }
 
+
+@MainActor
+final class FakeScreen: ScreenWake {
+    private(set) var changes: [Bool] = []
+    var onChange: ((Bool) -> Void)?
+    var awake: Bool { changes.last ?? false }
+
+    func setKeepAwake(_ on: Bool) {
+        changes.append(on)
+        onChange?(on)
+    }
+}
