@@ -3,8 +3,7 @@ import Foundation
 /// Pet-side session authority: finds a Lovense device over Bluetooth through the native engine,
 /// advertises it to the relay, and applies Owner's live frames to it only while the local
 /// SessionGate says Pet chose Ready for this epoch. Mirrors the pet path of Android's
-/// ControlRuntime. Android's BleRecovery-driven reacquisition of a dropped device is left out:
-/// here a lost device stops the session, and Pet picks it again and chooses Ready.
+/// ControlRuntime, including finding a dropped device again (see "Device recovery" below).
 @MainActor
 final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     private let relay: PetRelay
@@ -27,6 +26,8 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published private(set) var levels: [Double] = []
     @Published private(set) var hold = false
     @Published private(set) var safeWordLatched: Bool
+    /// The selected toy dropped mid-session and is being found again.
+    @Published private(set) var recoveringDevice = false
     @Published var resetError: String?
 
     private var stopping = false
@@ -35,6 +36,13 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     private var pendingReadyEpoch = ""
     private var readyGeneration = 0
     private var recoveryRequest = ""
+    private var recoveryTarget: PetDevice?
+    private var recoveredCandidate = false
+    private var recoveryScanning = false
+    private var recoveryGeneration = 0
+    private var readyAfterRecovery = false
+    /// After a device returns, Pet taps Resume rather than output restarting by itself.
+    private var needsManualResume = false
     private var frames: [Int64: AppliedFrame] = [:]
     private var frameOrder: [Int64] = []
     private var acceptedSequence: Int64 = 0
@@ -68,7 +76,7 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
 
     /// The selected device can take Owner's frames right now.
     var available: Bool {
-        pairedPet && initialized && ready && !stopping && selected != nil
+        pairedPet && initialized && ready && !stopping && selected != nil && !recoveringDevice
     }
 
     /// Becomes the relay's app-wide listener, so the engine, session and device keep running
@@ -183,6 +191,8 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
             return
         }
         advertise()
+        reportDeviceLink()
+        if recoveringDevice { scheduleRecovery(0) }
         tryRecover()
     }
 
@@ -231,6 +241,7 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
         guard relayOnline else { return "Reconnecting…" }
         if let errorMessage { return errorMessage }
         guard pairedPet else { return "Waiting to pair…" }
+        if recoveringDevice { return "Finding your toy again… ♡" }
         guard selected != nil else {
             if devices.isEmpty { return scanning ? "Scanning for your device…" : "No device found yet. Tap Scan." }
             return "Choose a device below."
@@ -243,10 +254,13 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     }
 
     var actionTitle: String {
-        !relayOnline ? "Reconnect" : gate.pending() ? "One moment…" : resumable ? "Resume ♡" : "I’m ready"
+        if recoveringDevice { return safeWordLatched ? "Reconnect & ready ♡" : "Reconnecting…" }
+        return !relayOnline ? "Reconnect" : gate.pending() ? "One moment…" : resumable ? "Resume ♡" : "I’m ready"
     }
 
     var actionEnabled: Bool {
+        // After Safe Word the toy stays unreachable until Pet chooses to reconnect and be ready.
+        if recoveringDevice { return safeWordLatched && !readyAfterRecovery }
         guard relayOnline else { return true }
         return relayState.optBool("online") && !gate.active() && gate.mayRequest()
             && (resumable || (available && !relayState.optBool("ready")))
@@ -254,17 +268,36 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
 
     /// Device choice is frozen while Owner may be driving it or is about to.
     var canChangeDevice: Bool {
-        pairedPet && initialized && !stopping && !gate.active() && !gate.pending()
+        pairedPet && initialized && !stopping && !gate.active() && !gate.pending() && !recoveringDevice
+    }
+
+    /// What the device list shows: while a lost toy is being found, it stays listed.
+    var displayDevices: [PetDevice] {
+        guard recoveringDevice, let target = recoveryTarget, !devices.contains(where: { $0.id == target.id }) else {
+            return devices
+        }
+        return devices + [target]
     }
 
     func action() {
         errorMessage = nil
         defer { objectWillChange.send() }
+        // After Safe Word, choosing Ready is what allows the toy to be reconnected at all.
+        if safeWordLatched && recoveringDevice {
+            readyAfterRecovery = true
+            relay.blockRetries(false)
+            if !relayOnline { relay.connect(enrollment: nil) }
+            scheduleRecovery(0)
+            return
+        }
         guard relayOnline else {
             relay.blockRetries(false)
             relay.connect(enrollment: nil)
             return
         }
+        guard !recoveringDevice else { return }
+        // Pet tapping this is the confirmation that a reconnected toy may be driven again.
+        needsManualResume = false
         guard !gate.active(), gate.mayRequest() else { return }
         if resumable {
             relay.send(RelayClient.json("resume", ["epoch": gate.epoch]))
@@ -296,6 +329,9 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     func safeWord() {
         cancelPendingReady()
         latchSafeWord(true)
+        // Nothing may reconnect until Pet chooses Ready again.
+        readyAfterRecovery = false
+        stopRecoveryScan()
         gate.stop()
         stopNative()
         relay.safeWord()
@@ -305,7 +341,7 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     // MARK: - Scanning and selection
 
     func toggleScan() {
-        guard initialized, canChangeDevice || scanning else { return }
+        guard initialized, !recoveringDevice, canChangeDevice || scanning else { return }
         let enabled = !scanning
         // A suspended engine (after Stop failed, a fatal error, or a lost heartbeat) refuses scans.
         if enabled && !ready { _ = submit(RelayClient.json("resume")) }
@@ -407,6 +443,7 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     }
 
     private func reset() {
+        cancelDeviceRecovery()
         stopNative()
         if initialized { _ = engine.submit(RelayClient.json("suspend").compactJSONString) }
         initialized = false
@@ -430,7 +467,10 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
         guard generation == pollGeneration else { return }
         let drained = engine.drain()
         if let events = try? JSONSerialization.jsonObject(with: Data(drained.utf8)) as? [JSONDictionary] {
-            for event in events { handle(event) }
+            // A lost toy's device list has to be seen before the error its failing write produced in
+            // the same batch, or that error ends a session that could have been recovered.
+            let lists = events.filter { $0.optString("type") == "devices" }
+            for event in lists + events.filter({ $0.optString("type") != "devices" }) { handle(event) }
         }
         schedule(0.05) { [weak self] in self?.poll(generation: generation) }
     }
@@ -449,21 +489,15 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
             let confirmed = event.optBool("confirmed")
             ready = event.optBool("active") && confirmed && selectedStopConfirmed(event)
             if !confirmed { errorMessage = "Stop unconfirmed. Check the device." }
+            if recoveringDevice {
+                if recoveredCandidate && confirmed && ready { finishDeviceRecovery() }
+                else { recoveredCandidate = false; scheduleRecovery(1) }
+            }
         case "devices":
             let incoming = (event.optArray("devices") ?? [])
                 .compactMap { ($0 as? JSONDictionary).flatMap(PetDevice.init) }
             devices = incoming
-            // A changed or missing device can't be trusted with the session it was readied for.
-            if let selected, !incoming.contains(selected) {
-                if gate.active() || gate.pending() || gate.canRecover() {
-                    cancelPendingReady()
-                    gate.stop()
-                    stopNative()
-                    relay.stop()
-                }
-                self.selected = nil
-                clearApplied()
-            }
+            reconcileSelected(with: incoming)
         case "scanning":
             scanning = event.optBool("enabled")
         case "vibration_applied":
@@ -481,13 +515,18 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
             ]))
         case "error":
             errorMessage = event.optString("message")
-            // Mid-session, output is no longer confirmed; an idle scan error leaves the device usable.
-            if gate.active() || gate.pending() {
+            if recoveringDevice {
+                // A failed scan or connect while looking: try again shortly.
+                recoveredCandidate = false
+                scheduleRecovery(1)
+            } else if gate.active() || gate.pending() {
+                // Mid-session, output is no longer confirmed; an idle scan error leaves the device usable.
                 ready = false
                 pause(temporary: false)
             }
         case "fatal":
             errorMessage = event.optString("message")
+            cancelDeviceRecovery()
             ready = false
             pause(temporary: false)
         default:
@@ -502,11 +541,155 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
         return (event.optArray("devices") ?? []).contains { ($0 as? NSNumber)?.intValue == selected.id }
     }
 
+    // MARK: - Device recovery
+
+    /// Whether a session could be using the selected toy right now.
+    private var hasSessionContext: Bool {
+        gate.active() || gate.pending() || gate.canRecover() || relayState.optBool("ready")
+    }
+
+    /// What a fresh device list means for the selected toy.
+    private func reconcileSelected(with incoming: [PetDevice]) {
+        guard let selected else { return }
+        if recoveringDevice { considerReturned(incoming); return }
+        if incoming.contains(selected) { return }
+        let sameToy = !selected.identity.isEmpty && incoming.contains { $0.identity == selected.identity }
+        // Gone, with a session that could have been using it: look for the same toy again.
+        // Changed controls, no identity to look for, or nothing depending on it: forget it.
+        if !sameToy && !selected.identity.isEmpty && hasSessionContext {
+            beginDeviceRecovery()
+        } else {
+            forgetSelectedDevice()
+        }
+    }
+
+    /// The selected toy can't be trusted with a session it wasn't readied for.
+    private func forgetSelectedDevice() {
+        if gate.active() || gate.pending() || gate.canRecover() {
+            cancelPendingReady()
+            gate.stop()
+            stopNative()
+            relay.stop()
+        }
+        selected = nil
+        clearApplied()
+    }
+
+    /// The toy dropped. Stop output, tell Owner, and look for it again. Android additionally
+    /// gates reconnection to this one toy at the Bluetooth layer; iOS can't, so a different toy
+    /// that connects while scanning is simply never driven, and only an exact match counts.
+    private func beginDeviceRecovery() {
+        guard !recoveringDevice, let target = selected, !target.identity.isEmpty else { return }
+        cancelPendingReady()
+        recoveryTarget = target
+        recoveringDevice = true
+        recoveredCandidate = false
+        recoveryRequest = ""
+        needsManualResume = true
+        gate.disconnected()
+        stopNative()
+        stopRecoveryScan()
+        reportDeviceLink()
+        scheduleRecovery(0.25)
+    }
+
+    /// While looking: the same toy coming back is a candidate; its controls changing ends things.
+    private func considerReturned(_ incoming: [PetDevice]) {
+        guard let target = recoveryTarget else { return }
+        if incoming.contains(where: { $0.identity == target.identity && $0.id == target.id && $0 != target }) {
+            cancelDeviceRecovery()
+            forgetSelectedDevice()
+            return
+        }
+        guard !recoveredCandidate, !safeWordLatched || readyAfterRecovery,
+              let match = incoming.first(where: { $0 == target })
+        else { return }
+        recoveredCandidate = true
+        selected = match
+        stopRecoveryScan()
+        // Confirm zero on the reconnected hardware before it can be driven again.
+        stopNative()
+    }
+
+    private func finishDeviceRecovery() {
+        recoveringDevice = false
+        recoveredCandidate = false
+        recoveryTarget = nil
+        stopRecoveryScan()
+        reportDeviceLink()
+        advertise()
+        if readyAfterRecovery {
+            readyAfterRecovery = false
+            action()
+        }
+    }
+
+    /// Pet gives up on a toy that isn't coming back: forget it, end what it was part of, and
+    /// let a different one be chosen.
+    func stopLookingForDevice() {
+        guard recoveringDevice else { return }
+        cancelDeviceRecovery()
+        forgetSelectedDevice()
+        advertise()
+        objectWillChange.send()
+    }
+
+    private func cancelDeviceRecovery() {
+        stopRecoveryScan()
+        recoveringDevice = false
+        recoveredCandidate = false
+        recoveryTarget = nil
+        readyAfterRecovery = false
+        needsManualResume = false
+    }
+
+    /// Scans in short windows with pauses between, only while nothing blocks reconnection.
+    private func scheduleRecovery(_ delay: TimeInterval) {
+        guard recoveringDevice, !recoveredCandidate, !recoveryScanning,
+              !safeWordLatched || readyAfterRecovery else { return }
+        recoveryGeneration += 1
+        let generation = recoveryGeneration
+        schedule(delay) { [weak self] in self?.retryDevice(generation) }
+    }
+
+    private func retryDevice(_ generation: Int) {
+        guard generation == recoveryGeneration, recoveringDevice, !recoveredCandidate,
+              !safeWordLatched || readyAfterRecovery else { return }
+        guard pairedPet, initialized, !stopping else { scheduleRecovery(1); return }
+        // A failed write suspends the engine; it has to be woken before it will scan.
+        if !ready { _ = submit(RelayClient.json("resume")) }
+        let error = submit(RelayClient.json("scan", ["enabled": true]))
+        guard error.isEmpty else { scheduleRecovery(2); return }
+        recoveryScanning = true
+        schedule(15) { [weak self] in self?.endRecoveryScan(generation) }
+    }
+
+    private func endRecoveryScan(_ generation: Int) {
+        guard generation == recoveryGeneration, recoveringDevice else { return }
+        stopRecoveryScan()
+        scheduleRecovery(2)
+    }
+
+    /// Also invalidates anything already scheduled, so a stale retry can't scan after this.
+    private func stopRecoveryScan() {
+        recoveryGeneration += 1
+        if recoveryScanning && initialized { _ = submit(RelayClient.json("scan", ["enabled": false])) }
+        recoveryScanning = false
+    }
+
+    /// Owner learns through the relay whether the toy is reachable, separately from the session.
+    private func reportDeviceLink() {
+        guard pairedPet, let selected, relayState.optBool("deviceOnline", true) == recoveringDevice else { return }
+        relay.send(RelayClient.json("device_link", ["id": selected.id, "connected": !recoveringDevice]))
+    }
+
     // MARK: - Relay
 
     private func advertise() {
         guard pairedPet else { return }
-        let payload: Any = initialized && ready ? selected?.relayPayload ?? NSNull() : NSNull()
+        // Keep advertising a toy that is being found again, so the relay holds on to it and
+        // Owner sees "finding your toy" rather than a device that vanished.
+        let payload: Any = initialized && (ready || recoveringDevice) ? selected?.relayPayload ?? NSNull() : NSNull()
         let signature = (payload as? JSONDictionary)?.compactJSONString ?? "null"
         guard signature != advertised else { return }
         advertised = signature
@@ -515,7 +698,7 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
 
     /// After a dropped connection, ask once per epoch to pick the session back up.
     private func tryRecover() {
-        guard available, relayState.optBool("deviceOnline", true), !safeWordLatched, gate.canRecover(),
+        guard available, !needsManualResume, relayState.optBool("deviceOnline", true), !safeWordLatched, gate.canRecover(),
               !gate.active(), relayState.optBool("online"), relayState.optBool("resumeAllowed"),
               !relayState.optBool("paused"), !relayState.optBool("safeWord"), gate.epoch != recoveryRequest
         else { return }

@@ -6,6 +6,10 @@ struct PetDevice: Equatable {
     let id: Int
     let name: String
     let features: [TouchModel.Feature]
+    /// Local-only identity of the physical toy, for finding the same one again after a disconnect.
+    /// Never sent to the relay (see relayPayload). Empty when the engine didn't report one, in
+    /// which case a lost device can't be recovered.
+    let identity: String
 
     init?(nativeDevice: JSONDictionary) {
         guard let name = nativeDevice["name"] as? String,
@@ -26,6 +30,7 @@ struct PetDevice: Equatable {
         self.id = id
         self.name = name
         self.features = features
+        self.identity = nativeDevice.optString("identity")
     }
 
     /// The {id, name, features:[{index,label,steps}]} shape Owner's ControlViewModel expects.
