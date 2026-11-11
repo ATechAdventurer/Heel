@@ -68,10 +68,14 @@ struct HeelApp: App {
                 if role == .owner {
                     ControlView(model: runtime.owner)
                 } else {
-                    PetControlView(model: runtime.pet, onReturnToPick: { returnToPick() })
+                    PetControlView(model: runtime.pet)
                 }
             }
-            .onAppear { runtime.activate(role) { returnToPick() } }
+            .onAppear {
+                runtime.activate(role, onReturnToPick: { returnToPick() },
+                                 // The pair is gone but this phone keeps its role: pair again.
+                                 onUnpaired: { path = [.pairing(role)] })
+            }
         }
     }
 }

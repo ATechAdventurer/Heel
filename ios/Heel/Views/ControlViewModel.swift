@@ -13,7 +13,10 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     private let schedule: (TimeInterval, @escaping () -> Void) -> Void
     private weak var touchModel: TouchModel?
 
+    /// Where to go once the relay confirms the pair is gone: Pick after a role reset, otherwise
+    /// back to pairing in the same role, as on Android.
     var onReturnToPick: (() -> Void)?
+    var onUnpaired: (() -> Void)?
 
     @Published private(set) var relayOnline = false
     @Published private(set) var relayState: JSONDictionary = [:]
@@ -37,6 +40,7 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published var spellError: String?
     @Published var resetError: String?
 
+    private var resettingRole = false
     private var outgoingSequence: Int64 = 0
     private var lastSubmitted: [Double]?
     private var restoredEpoch = ""
@@ -65,8 +69,10 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
 
     /// Becomes the relay's app-wide listener, so the session keeps running whichever screen is
     /// showing. SessionRuntime calls this when Owner's role is paired.
-    func activate(onReturnToPick: @escaping () -> Void) {
+    func activate(onReturnToPick: @escaping () -> Void, onUnpaired: @escaping () -> Void) {
         self.onReturnToPick = onReturnToPick
+        self.onUnpaired = onUnpaired
+        resettingRole = false
         // setController replays the current state; clearing after it would leave Owner unable
         // to send until the relay's next state change.
         relayState = [:]
@@ -80,6 +86,8 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         haptics.stop()
         relay.setController(nil)
         onReturnToPick = nil
+        onUnpaired = nil
+        resettingRole = false
     }
 
     func screenDidAppear() {
@@ -158,7 +166,14 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
         guard paired, message.optString("role") == "owner" else {
             gate.stop()
             resetLocal()
-            if !paired { onReturnToPick?() }
+            if !paired {
+                if resettingRole {
+                    resettingRole = false
+                    onReturnToPick?()
+                } else {
+                    onUnpaired?()
+                }
+            }
             return
         }
 
@@ -320,7 +335,9 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
             return
         }
         stopAll()
+        resettingRole = true
         if !relay.send(RelayClient.json("unpair")) {
+            resettingRole = false
             resetError = "Reconnect to reset the role."
         }
     }

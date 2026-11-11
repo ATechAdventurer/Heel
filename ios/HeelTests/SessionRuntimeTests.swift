@@ -36,13 +36,13 @@ final class SessionRuntimeTests: XCTestCase {
     /// Owner with a live session: Pet is ready, Owner starts, the relay confirms.
     private func startOwnerSession(onReturnToPick: @escaping () -> Void = {}) {
         relay.state = state(role: "owner", ready: true)
-        runtime.activate(.owner, onReturnToPick: onReturnToPick)
+        runtime.activate(.owner, onReturnToPick: onReturnToPick, onUnpaired: {})
         runtime.owner.action()
         runtime.owner.relayReceived(state(role: "owner", ready: true, active: true))
     }
 
     func testActivatingARoleMakesItsModelTheRelayController() {
-        runtime.activate(.owner) {}
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
         XCTAssertTrue(relay.controller === runtime.owner)
         XCTAssertEqual(runtime.role, .owner)
     }
@@ -50,7 +50,7 @@ final class SessionRuntimeTests: XCTestCase {
     func testChangingRoleStopsTheOldSessionAndHandsOverTheRelay() {
         startOwnerSession()
         XCTAssertTrue(runtime.owner.sessionActive)
-        runtime.activate(.pet) {}
+        runtime.activate(.pet, onReturnToPick: {}, onUnpaired: {})
         XCTAssertFalse(runtime.owner.sessionActive)
         XCTAssertEqual(relay.calls.first, "stop")
         XCTAssertTrue(relay.controller === runtime.pet)
@@ -73,15 +73,16 @@ final class SessionRuntimeTests: XCTestCase {
     }
 
     func testActivatingTheActiveRoleAgainKeepsItsSessionRunning() {
-        var first = 0, second = 0
-        startOwnerSession(onReturnToPick: { first += 1 })
-        runtime.activate(.owner) { second += 1 }
+        var firstPick = 0, firstUnpaired = 0, secondUnpaired = 0
+        startOwnerSession(onReturnToPick: { firstPick += 1 })
+        runtime.activate(.owner, onReturnToPick: { firstPick += 1 }, onUnpaired: { secondUnpaired += 1 })
         XCTAssertTrue(runtime.owner.sessionActive, "A re-rendered screen must not interrupt the session")
         XCTAssertFalse(relay.calls.contains("stop"))
-        // The refreshed closure is the one used when the relay later says unpaired.
+        // The refreshed closures are the ones used when the relay later says unpaired.
         runtime.owner.relayReceived(["type": "state", "phase": "unpaired"])
-        XCTAssertEqual(first, 0)
-        XCTAssertEqual(second, 1)
+        XCTAssertEqual(firstUnpaired, 0)
+        XCTAssertEqual(secondUnpaired, 1)
+        XCTAssertEqual(firstPick, 0, "A plain unpair keeps the role, so it doesn't go to Pick")
     }
 
     func testTheModelsAreCreatedOnceAndOnlyWhenNeeded() {
@@ -90,15 +91,15 @@ final class SessionRuntimeTests: XCTestCase {
         let runtime = SessionRuntime(owner: { made += 1; return ControlViewModel(relay: relay) },
                                      pet: { XCTFail("Pet was never used"); return PetControlViewModel() })
         XCTAssertEqual(made, 0)
-        runtime.activate(.owner) {}
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
         runtime.deactivate()
-        runtime.activate(.owner) {}
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
         XCTAssertEqual(made, 1)
     }
 
     func testPetEngineStopsPollingOnceDeactivated() {
         relay.state = state(role: "pet")
-        runtime.activate(.pet) {}
+        runtime.activate(.pet, onReturnToPick: {}, onUnpaired: {})
         engine.events = [["type": "ready", "active": true]]
         scheduler.tick { $0 < 1 }
         XCTAssertTrue(runtime.pet.ready, "Polling runs while Pet is active")
@@ -112,7 +113,7 @@ final class SessionRuntimeTests: XCTestCase {
 
     func testPetKeepsRunningWhileNoScreenIsShowing() {
         relay.state = state(role: "pet")
-        runtime.activate(.pet) {}
+        runtime.activate(.pet, onReturnToPick: {}, onUnpaired: {})
         // No screen exists in this test at all; the model still reacts to the relay.
         runtime.pet.relayReceived(state(role: "pet", ready: false))
         XCTAssertTrue(runtime.pet.initialized)
@@ -137,7 +138,7 @@ final class SessionRuntimeTests: XCTestCase {
 
     func testScreenIsNotHeldAwakeWhileIdle() {
         relay.state = state(role: "owner")
-        runtime.activate(.owner) {}
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
         runtime.refreshScreenWake()
         XCTAssertTrue(screen.changes.isEmpty)
         XCTAssertFalse(screen.awake)
@@ -145,7 +146,7 @@ final class SessionRuntimeTests: XCTestCase {
 
     func testScreenStaysAwakeWhileThePeerIsReadyToStart() {
         relay.state = state(role: "owner", ready: true)
-        runtime.activate(.owner) {}
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
         XCTAssertTrue(screen.awake, "Owner is one tap from starting, so the phone must not lock")
     }
 
@@ -158,7 +159,7 @@ final class SessionRuntimeTests: XCTestCase {
 
     func testScreenFollowsTheModelWithoutBeingAsked() {
         relay.state = state(role: "owner")
-        runtime.activate(.owner) {}
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
         XCTAssertFalse(screen.awake)
 
         let woke = expectation(description: "screen held awake")
@@ -194,14 +195,14 @@ final class SessionRuntimeTests: XCTestCase {
 
     func testBackgroundWhileIdleDoesNotPause() {
         relay.state = state(role: "owner", ready: true)
-        runtime.activate(.owner) {}
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
         runtime.appDidEnterBackground()
         XCTAssertFalse(relay.calls.contains("pause"))
     }
 
     func testBackgroundPausesPetsSessionAndStopsTheDevice() {
         relay.state = state(role: "pet")
-        runtime.activate(.pet) {}
+        runtime.activate(.pet, onReturnToPick: {}, onUnpaired: {})
         engine.events = [["type": "ready", "active": true], ["type": "devices", "devices": [
             ["id": 3, "name": "Hush", "messages": ["ScalarCmd": [["ActuatorType": "Vibrate", "FeatureDescriptor": "", "StepCount": 20]]]],
         ]]]
