@@ -5,9 +5,7 @@ import SwiftUI
 struct PetControlView: View {
     /// Owned by SessionRuntime, not this view, so the session outlives the screen.
     @ObservedObject var model: PetControlViewModel
-    let onReturnToPick: () -> Void
-    @State private var showingDetails = false
-    @State private var showingUnpairConfirm = false
+    @State private var showingSettings = false
     @Environment(\.sizeCategory) private var sizeCategory
 
     var body: some View {
@@ -60,35 +58,12 @@ struct PetControlView: View {
                     .padding(.top, 8)
             }
 
-            Button(action: onReturnToPick) {
-                Text("Back to Pick")
-                    .font(Nunito.font(size: 15, weight: 700, relativeTo: .subheadline, category: sizeCategory))
-                    .foregroundStyle(Color("AppAccent"))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-                    .background(RoundedRectangle(cornerRadius: 18).fill(Color("PairingSurface")))
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 8)
-            .padding(.bottom, 24)
+            Color.clear.frame(height: 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color("AppBackground"))
-        .confirmationDialog("Pair & device", isPresented: $showingDetails, titleVisibility: .visible) {
-            Button("Unpair", role: .destructive) { showingUnpairConfirm = true }
-            Button("Close", role: .cancel) {}
-        } message: {
-            Text("\(model.pairSummary)\n\(model.deviceSummary)")
-        }
-        .alert("Unpair these phones?", isPresented: $showingUnpairConfirm) {
-            Button("Keep pair", role: .cancel) {}
-            Button("Unpair", role: .destructive) { model.unpairAndReset() }
-        } message: {
-            Text("Remote control will stop. You can pair again with a new invitation.")
-        }
-        .alert("Couldn’t unpair", isPresented: Binding(get: { model.resetError != nil }, set: { if !$0 { model.resetError = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.resetError ?? "")
+        .sheet(isPresented: $showingSettings) {
+            PetSettingsSheet(model: model)
         }
     }
 
@@ -99,15 +74,15 @@ struct PetControlView: View {
     private var header: some View {
         HStack {
             Button {
-                model.openDetails()
-                showingDetails = true
+                model.openSettings()
+                showingSettings = true
             } label: {
                 Text("heel")
                     .font(Nunito.font(size: 25, weight: 800, relativeTo: .title2, category: sizeCategory))
                     .foregroundStyle(Color("AppAccent"))
             }
             .frame(minHeight: 44)
-            .accessibilityLabel("Pair and device details")
+            .accessibilityLabel("Settings")
             Spacer()
         }
         .frame(minHeight: 48)
@@ -293,5 +268,5 @@ struct SafeWordSlider: View {
 }
 
 #Preview {
-    PetControlView(model: PetControlViewModel(), onReturnToPick: {})
+    PetControlView(model: PetControlViewModel())
 }

@@ -37,7 +37,7 @@ final class ControlViewModelTests: XCTestCase {
 
     func testActivatingKeepsTheStateTheRelayReplays() {
         relay.state = ownerState("e1", ready: true)
-        model.activate(onReturnToPick: {})
+        model.activate(onReturnToPick: {}, onUnpaired: {})
         XCTAssertEqual(model.relayState.optString("phase"), "paired")
         XCTAssertEqual(model.deviceName, "Hush")
         XCTAssertTrue(model.sessionActionEnabled, "Owner can start straight away when Pet is ready")
@@ -59,13 +59,43 @@ final class ControlViewModelTests: XCTestCase {
         XCTAssertTrue(relay.sent("unpair").isEmpty)
     }
 
-    func testRelayConfirmingUnpairedReturnsToPick() {
+    func testAnUnpairWeDidNotAskForGoesBackToPairingInTheSameRole() {
         model.relayConnectionChanged(connected: true, reason: "Connected")
         model.relayReceived(ownerState("e1"))
-        var returned = false
-        model.onReturnToPick = { returned = true }
+        var pick = 0, unpaired = 0
+        model.onReturnToPick = { pick += 1 }
+        model.onUnpaired = { unpaired += 1 }
         model.relayReceived(["type": "state", "phase": "unpaired"])
-        XCTAssertTrue(returned)
+        XCTAssertEqual(unpaired, 1)
+        XCTAssertEqual(pick, 0)
+    }
+
+    func testResettingTheRoleReturnsToPickOnceTheRelayConfirms() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        model.relayReceived(ownerState("e1"))
+        var pick = 0, unpaired = 0
+        model.onReturnToPick = { pick += 1 }
+        model.onUnpaired = { unpaired += 1 }
+        model.unpairAndReset()
+        XCTAssertEqual(pick, 0, "Nothing moves until the relay confirms")
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertEqual(pick, 1)
+        XCTAssertEqual(unpaired, 0)
+    }
+
+    func testAFailedResetDoesNotSendTheNextUnpairToPick() {
+        model.relayConnectionChanged(connected: true, reason: "Connected")
+        model.relayReceived(ownerState("e1"))
+        var pick = 0, unpaired = 0
+        model.onReturnToPick = { pick += 1 }
+        model.onUnpaired = { unpaired += 1 }
+        relay.connected = false
+        model.unpairAndReset()
+        XCTAssertNotNil(model.resetError)
+        relay.connected = true
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertEqual(unpaired, 1)
+        XCTAssertEqual(pick, 0)
     }
 
     // MARK: - Slider mode (VoiceOver / Switch Control)
@@ -211,18 +241,18 @@ final class ControlViewModelTests: XCTestCase {
     }
 
     func testDeactivatingReleasesTheRelayAndForgetsWhereToReturn() {
-        model.activate(onReturnToPick: {})
+        model.activate(onReturnToPick: {}, onUnpaired: {})
         model.deactivate()
         XCTAssertNil(relay.controller)
         XCTAssertNil(model.onReturnToPick)
     }
 
-    func testActivatingReturnsToPickWhenTheRelayReportsUnpaired() {
-        var returned = false
+    func testActivatingWiresBothDestinations() {
+        var unpaired = false
         relay.state = ownerState("e1", ready: true)
-        model.activate(onReturnToPick: { returned = true })
+        model.activate(onReturnToPick: {}, onUnpaired: { unpaired = true })
         model.relayReceived(["type": "state", "phase": "unpaired"])
-        XCTAssertTrue(returned)
+        XCTAssertTrue(unpaired)
     }
 
     // MARK: - Pause, resume and keeping the screen awake

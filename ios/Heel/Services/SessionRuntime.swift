@@ -34,12 +34,12 @@ final class SessionRuntime {
     }
 
     /// Makes `role` the live session. Asking for the role that's already active only refreshes
-    /// where it returns to, so a re-rendered screen can't restart or interrupt it.
-    func activate(_ role: Role, onReturnToPick: @escaping () -> Void) {
+    /// where it navigates to, so a re-rendered screen can't restart or interrupt it.
+    func activate(_ role: Role, onReturnToPick: @escaping () -> Void, onUnpaired: @escaping () -> Void) {
         if self.role == role {
             switch role {
-            case .owner: owner.onReturnToPick = onReturnToPick
-            case .pet: pet.onReturnToPick = onReturnToPick
+            case .owner: owner.onReturnToPick = onReturnToPick; owner.onUnpaired = onUnpaired
+            case .pet: pet.onReturnToPick = onReturnToPick; pet.onUnpaired = onUnpaired
             }
             return
         }
@@ -51,11 +51,11 @@ final class SessionRuntime {
         case .owner:
             observation = owner.objectWillChange.receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.refreshScreenWake() }
-            owner.activate(onReturnToPick: onReturnToPick)
+            owner.activate(onReturnToPick: onReturnToPick, onUnpaired: onUnpaired)
         case .pet:
             observation = pet.objectWillChange.receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.refreshScreenWake() }
-            pet.activate(onReturnToPick: onReturnToPick)
+            pet.activate(onReturnToPick: onReturnToPick, onUnpaired: onUnpaired)
         }
         refreshScreenWake()
     }

@@ -318,6 +318,23 @@ final class PetDeviceRecoveryTests: XCTestCase {
         XCTAssertTrue(model.displayDevices.isEmpty)
     }
 
+    func testUnpairingFromSettingsWhileLookingClearsTheSearchAndReturnsToPairing() {
+        startSession()
+        loseTheToy()
+        var unpaired = 0, pick = 0
+        model.onUnpaired = { unpaired += 1 }
+        model.onReturnToPick = { pick += 1 }
+        model.openSettings()
+        model.unpair()
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertEqual(unpaired, 1)
+        XCTAssertEqual(pick, 0)
+        XCTAssertFalse(model.recoveringDevice)
+        XCTAssertNil(model.selected)
+        tick(1); tick(2)
+        XCTAssertEqual(scans(true), 0, "Nothing keeps scanning for a toy of a pair that is gone")
+    }
+
     // MARK: - The device model
 
     func testIdentityIsKeptLocallyAndNeverSentToTheRelay() throws {

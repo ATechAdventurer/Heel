@@ -215,9 +215,9 @@ final class PetControlViewModelTests: XCTestCase {
         XCTAssertEqual(model.deviceSummary, "No toy connected")
     }
 
-    func testOpeningDetailsPausesAnActiveSession() {
+    func testOpeningSettingsPausesAnActiveSession() {
         startSession()
-        model.openDetails()
+        model.openSettings()
         XCTAssertFalse(model.sessionActive)
         XCTAssertEqual(relay.calls.last, "pause")
     }
@@ -238,12 +238,60 @@ final class PetControlViewModelTests: XCTestCase {
         XCTAssertTrue(relay.sent("unpair").isEmpty)
     }
 
-    func testRelayConfirmingUnpairedReturnsToPick() {
+    func testAnUnpairWeDidNotAskForGoesBackToPairingInTheSameRole() {
         startSession()
-        var returned = false
-        model.onReturnToPick = { returned = true }
+        var pick = 0, unpaired = 0
+        model.onReturnToPick = { pick += 1 }
+        model.onUnpaired = { unpaired += 1 }
         model.relayReceived(["type": "state", "phase": "unpaired"])
-        XCTAssertTrue(returned)
+        XCTAssertEqual(unpaired, 1)
+        XCTAssertEqual(pick, 0)
+    }
+
+    func testUnpairStopsOutputAsksTheRelayAndThenReturnsToPairing() {
+        startSession()
+        var pick = 0, unpaired = 0
+        model.onReturnToPick = { pick += 1 }
+        model.onUnpaired = { unpaired += 1 }
+        model.unpair()
+        XCTAssertFalse(model.sessionActive)
+        XCTAssertEqual(relay.sent.last?.optString("type"), "unpair")
+        XCTAssertEqual(unpaired, 0, "Nothing moves until the relay confirms")
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertEqual(unpaired, 1)
+        XCTAssertEqual(pick, 0)
+    }
+
+    func testResettingTheRoleReturnsToPickOnceTheRelayConfirms() {
+        startSession()
+        var pick = 0, unpaired = 0
+        model.onReturnToPick = { pick += 1 }
+        model.onUnpaired = { unpaired += 1 }
+        model.unpairAndReset()
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertEqual(pick, 1)
+        XCTAssertEqual(unpaired, 0)
+    }
+
+    func testUnpairWhileOfflineExplainsAndStaysPut() {
+        model.relayConnectionChanged(connected: false, reason: "Offline")
+        model.unpair()
+        XCTAssertEqual(model.resetError, "Reconnect first so Heel can unpair these phones.")
+        XCTAssertTrue(relay.sent("unpair").isEmpty)
+    }
+
+    func testAFailedResetDoesNotSendTheNextUnpairToPick() {
+        startSession()
+        var pick = 0, unpaired = 0
+        model.onReturnToPick = { pick += 1 }
+        model.onUnpaired = { unpaired += 1 }
+        relay.connected = false
+        model.unpairAndReset()
+        XCTAssertNotNil(model.resetError)
+        relay.connected = true
+        model.relayReceived(["type": "state", "phase": "unpaired"])
+        XCTAssertEqual(unpaired, 1)
+        XCTAssertEqual(pick, 0)
     }
 
     func testBackgroundingPausesTheSessionAndStopsTheDevice() {

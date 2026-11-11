@@ -12,7 +12,10 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     private let schedule: (TimeInterval, @escaping () -> Void) -> Void
     private let gate = SessionGate(pet: true)
 
+    /// Where to go once the relay confirms the pair is gone: Pick after a role reset, otherwise
+    /// back to pairing in the same role, as on Android.
     var onReturnToPick: (() -> Void)?
+    var onUnpaired: (() -> Void)?
 
     @Published private(set) var relayOnline = false
     @Published private(set) var relayState: JSONDictionary = [:]
@@ -31,6 +34,7 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
     @Published var resetError: String?
 
     private var stopping = false
+    private var resettingRole = false
     private var advertised = "null"
     private var pollGeneration = 0
     private var pendingReadyEpoch = ""
@@ -81,8 +85,10 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
 
     /// Becomes the relay's app-wide listener, so the engine, session and device keep running
     /// whichever screen is showing. SessionRuntime calls this when Pet's role is paired.
-    func activate(onReturnToPick: @escaping () -> Void) {
+    func activate(onReturnToPick: @escaping () -> Void, onUnpaired: @escaping () -> Void) {
         self.onReturnToPick = onReturnToPick
+        self.onUnpaired = onUnpaired
+        resettingRole = false
         relay.blockRetries(safeWordLatched)
         // setController replays the current state; Pet needs it to start the engine and
         // advertise its device at all.
@@ -95,6 +101,8 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
         reset()
         relay.setController(nil)
         onReturnToPick = nil
+        onUnpaired = nil
+        resettingRole = false
     }
 
     // MARK: - RelayListener
@@ -144,7 +152,12 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
             reset()
             if !paired {
                 relay.blockRetries(false)
-                onReturnToPick?()
+                if resettingRole {
+                    resettingRole = false
+                    onReturnToPick?()
+                } else {
+                    onUnpaired?()
+                }
             }
             return
         }
@@ -214,21 +227,35 @@ final class PetControlViewModel: NSObject, ObservableObject, RelayListener {
 
     var deviceSummary: String { selected?.name ?? "No toy connected" }
 
-    /// Opening the details pauses output, as on Android, so nothing runs behind a dialog.
-    func openDetails() {
+    /// Opening Settings pauses output, as on Android, so nothing runs behind it.
+    func openSettings() {
         if gate.active() || gate.pending() { pause(temporary: true) }
     }
 
-    /// Ends the pair on the relay too, so Pick isn't reached with a pair still standing.
-    /// Navigation happens when the relay confirms "unpaired" (see handleState).
+    /// Ends the pair on the relay and returns to pairing in the same role. Navigation happens
+    /// when the relay confirms "unpaired" (see handleState).
+    func unpair() {
+        requestUnpair(resetting: false, offline: "Reconnect first so Heel can unpair these phones.",
+                      failed: "Reconnect to unpair.")
+    }
+
+    /// Ends the pair on the relay too, then returns to Pick, so Pick is never reached with a
+    /// pair still standing. Navigation happens when the relay confirms "unpaired".
     func unpairAndReset() {
+        requestUnpair(resetting: true, offline: "Reconnect first so Heel can unpair before changing roles.",
+                      failed: "Reconnect to reset the role.")
+    }
+
+    private func requestUnpair(resetting: Bool, offline: String, failed: String) {
         guard relayOnline else {
-            resetError = "Reconnect first so Heel can unpair before changing roles."
+            resetError = offline
             return
         }
         pause(temporary: false)
+        resettingRole = resetting
         if !relay.send(RelayClient.json("unpair")) {
-            resetError = "Reconnect to reset the role."
+            resettingRole = false
+            resetError = failed
         }
     }
 
