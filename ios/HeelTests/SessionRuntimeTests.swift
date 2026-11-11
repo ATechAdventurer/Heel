@@ -7,6 +7,7 @@ final class SessionRuntimeTests: XCTestCase {
     private var engine: FakeEngine!
     private var scheduler: ManualScheduler!
     private var screen: FakeScreen!
+    private var activity: FakeActivity!
     private var runtime: SessionRuntime!
 
     override func setUp() {
@@ -15,16 +16,18 @@ final class SessionRuntimeTests: XCTestCase {
         let engine = FakeEngine()
         let scheduler = ManualScheduler()
         let screen = FakeScreen()
+        let activity = FakeActivity()
         let defaults = UserDefaults(suiteName: "SessionRuntimeTests.\(UUID().uuidString)")!
         self.relay = relay
         self.engine = engine
         self.scheduler = scheduler
         self.screen = screen
+        self.activity = activity
         runtime = SessionRuntime(
             owner: { ControlViewModel(relay: relay, haptics: OwnerHaptics(output: NullHapticsOutput()),
                                       spellbook: SpellBook(defaults: defaults), schedule: { _, _ in }) },
             pet: { PetControlViewModel(relay: relay, engine: engine, defaults: defaults, schedule: scheduler.schedule) },
-            screen: screen)
+            screen: screen, activity: activity)
     }
 
     private func state(role: String, epoch: String = "e1", ready: Bool = false, active: Bool = false) -> JSONDictionary {
@@ -166,6 +169,38 @@ final class SessionRuntimeTests: XCTestCase {
         screen.onChange = { if $0 { woke.fulfill() } }
         runtime.owner.relayReceived(state(role: "owner", ready: true))
         wait(for: [woke], timeout: 2)
+    }
+
+    // MARK: - Lock Screen activity
+
+    func testNoActivityWhileIdle() {
+        relay.state = state(role: "owner")
+        runtime.activate(.owner, onReturnToPick: {}, onUnpaired: {})
+        XCTAssertNil(activity.phase)
+    }
+
+    func testActivityShowsTogetherWhileASessionRuns() {
+        startOwnerSession()
+        runtime.refreshScreenWake()
+        XCTAssertEqual(activity.phase, .together)
+    }
+
+    func testActivityShowsPausedAfterBackgroundingAndEndsOnDeactivate() {
+        startOwnerSession()
+        runtime.appDidEnterBackground()
+        runtime.owner.relayReceived(["type": "state", "phase": "paired", "role": "owner", "epoch": "e1",
+                                     "online": true, "ready": false, "active": false, "paused": true,
+                                     "resumeAllowed": true])
+        runtime.refreshScreenWake()
+        XCTAssertEqual(activity.phase, .paused)
+        runtime.deactivate()
+        XCTAssertNil(activity.phase)
+    }
+
+    func testPetActivityFollowsThePetSession() {
+        relay.state = state(role: "pet", ready: true)
+        runtime.activate(.pet, onReturnToPick: {}, onUnpaired: {})
+        XCTAssertEqual(activity.phase, .waiting)
     }
 
     // MARK: - Background

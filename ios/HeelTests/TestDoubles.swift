@@ -85,3 +85,12 @@ final class FakeScreen: ScreenWake {
         onChange?(on)
     }
 }
+
+
+@MainActor
+final class FakeActivity: SessionActivity {
+    private(set) var shown: [SessionPhase?] = []
+    var phase: SessionPhase? { shown.last ?? nil }
+
+    func show(_ phase: SessionPhase?) { shown.append(phase) }
+}

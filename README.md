@@ -24,7 +24,7 @@ For the app to function, a relay server exists to establish a connection between
 - Direct Bluetooth through embedded [Buttplug](https://buttplug.io/). <-- Huge shoutout to these folks. They're incredible engineers and work very hard. Go check out their community!
 - Dark/light appearance and a few personal stickers. In the future I plan to allow customization of the stickers!
 
-Android 8.0+ on an **ARM64** phone is required. The iOS app needs iOS 16.1+, has no release yet, and is built from source: see [`ios/README.md`](ios/README.md). Heel exposes vibration channels supported by its pinned ButtplugIO device configuration. I cannot promise of support for every Lovense product or for non-vibration functions. Hush has been tested thoroughly during development but broader hardware testing is welcome.
+Android 8.0+ on an **ARM64** phone is required. The iOS app needs iOS 16.2+, has no release yet, and is built from source: see [`ios/README.md`](ios/README.md). Heel exposes vibration channels supported by its pinned ButtplugIO device configuration. I cannot promise of support for every Lovense product or for non-vibration functions. Hush has been tested thoroughly during development but broader hardware testing is welcome.
 
 ## Get started
 

@@ -2,7 +2,7 @@ name: Heel
 options:
   bundleIdPrefix: dev.atechadventure
   deploymentTarget:
-    iOS: "16.1"
+    iOS: "16.2"
 configFiles:
   Debug: Config/Local.xcconfig
   Release: Config/Local.xcconfig
@@ -21,6 +21,9 @@ targets:
     platform: iOS
     sources:
       - path: Heel
+      - path: Shared
+    dependencies:
+      - target: HeelWidgets
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.atechadventure.heel
@@ -34,6 +37,19 @@ targets:
         script: |
           "$SRCROOT/../native/build-ios.sh"
         basedOnDependencyAnalysis: false
+
+  HeelWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: HeelWidgets
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.atechadventure.heel.widgets
+        INFOPLIST_FILE: HeelWidgets/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
 
   HeelTests:
     type: bundle.unit-test

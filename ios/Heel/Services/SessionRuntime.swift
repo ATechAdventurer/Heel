@@ -22,15 +22,18 @@ final class SessionRuntime {
     private(set) var role: Role?
 
     private let screen: ScreenWake
+    private let activity: SessionActivity
     private var observation: AnyCancellable?
     private var keepingAwake = false
 
     init(owner: @escaping @MainActor () -> ControlViewModel = { ControlViewModel() },
          pet: @escaping @MainActor () -> PetControlViewModel = { PetControlViewModel() },
-         screen: ScreenWake? = nil) {
+         screen: ScreenWake? = nil,
+         activity: SessionActivity? = nil) {
         makeOwner = owner
         makePet = pet
         self.screen = screen ?? UIKitScreenWake()
+        self.activity = activity ?? ActivityKitSessionActivity()
     }
 
     /// Makes `role` the live session. Asking for the role that's already active only refreshes
@@ -83,8 +86,18 @@ final class SessionRuntime {
         refreshScreenWake()
     }
 
+    /// Keeps the Lock Screen activity in step with the session.
+    private func refreshActivity() {
+        switch role {
+        case .owner: activity.show(owner.activityPhase)
+        case .pet: activity.show(pet.activityPhase)
+        case nil: activity.show(nil)
+        }
+    }
+
     /// Only touches the display setting when the answer actually changes.
     func refreshScreenWake() {
+        refreshActivity()
         let wanted: Bool
         switch role {
         case .owner: wanted = owner.keepsScreenAwake
