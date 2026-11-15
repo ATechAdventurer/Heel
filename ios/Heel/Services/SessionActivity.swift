@@ -24,9 +24,6 @@ final class ActivityKitSessionActivity: SessionActivity {
     static let shared = ActivityKitSessionActivity()
 
     private var activity: Activity<SessionActivityAttributes>?
-    private(set) var lastError: String?
-    /// A debug preview isn't a session, so the runtime's "no session" refreshes must not end it.
-    private var previewing = false
     private var shown: SessionPhase?
     private var refresh: Timer?
 
@@ -37,7 +34,7 @@ final class ActivityKitSessionActivity: SessionActivity {
     }
 
     func show(_ phase: SessionPhase?) {
-        guard !previewing, phase != shown else { return }
+        guard phase != shown else { return }
         shown = phase
         guard let phase else {
             refresh?.invalidate()
@@ -53,40 +50,16 @@ final class ActivityKitSessionActivity: SessionActivity {
         }
     }
 
-    private func push(_ phase: SessionPhase, staleAfter: TimeInterval = ActivityKitSessionActivity.staleAfter) {
+    private func push(_ phase: SessionPhase) {
         let content = ActivityContent(state: SessionActivityAttributes.ContentState(phase: phase),
-                                      staleDate: Date().addingTimeInterval(staleAfter))
+                                      staleDate: Date().addingTimeInterval(Self.staleAfter))
         if let activity {
             Task { await activity.update(content) }
         } else if ActivityAuthorizationInfo().areActivitiesEnabled {
             // Requested while the app is in front: ActivityKit refuses to start one from the background.
-            do {
-                activity = try Activity.request(attributes: SessionActivityAttributes(), content: content, pushType: nil)
-                lastError = nil
-            } catch {
-                lastError = String(describing: error)
-            }
+            activity = try? Activity.request(attributes: SessionActivityAttributes(), content: content, pushType: nil)
         }
     }
-
-#if DEBUG
-    /// Lets a developer see every layout without pairing two phones. `staleAfter` makes the
-    /// "Open Heel to check in" fallback appear after that many seconds.
-    /// Returns what happened, so the panel can say so instead of silently doing nothing.
-    func preview(_ phase: SessionPhase?, staleAfter: TimeInterval = ActivityKitSessionActivity.staleAfter) -> String {
-        refresh?.invalidate()
-        refresh = nil
-        shown = phase
-        previewing = phase != nil
-        guard let phase else { end(); return "Ended" }
-        push(phase, staleAfter: staleAfter)
-        if activity != nil { return "Showing \(phase.rawValue). Lock the phone or leave Heel to see it." }
-        if !ActivityAuthorizationInfo().areActivitiesEnabled {
-            return "Live Activities are turned off for Heel (iOS Settings › Heel › Live Activities)."
-        }
-        return "ActivityKit refused the request: \(lastError ?? "unknown")"
-    }
-#endif
 
     private func end() {
         guard let activity else { return }

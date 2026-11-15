@@ -26,10 +26,6 @@ struct WelcomeView: View {
                                  hint: "Come closer", rotation: 6, action: { onChoose(.pet) })
                     }
                     .padding(.top, 64)
-
-                    #if DEBUG
-                    ActivityPreviewPanel()
-                    #endif
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
