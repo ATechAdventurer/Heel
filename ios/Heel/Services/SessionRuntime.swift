@@ -33,7 +33,7 @@ final class SessionRuntime {
         makeOwner = owner
         makePet = pet
         self.screen = screen ?? UIKitScreenWake()
-        self.activity = activity ?? ActivityKitSessionActivity()
+        self.activity = activity ?? ActivityKitSessionActivity.shared
     }
 
     /// Makes `role` the live session. Asking for the role that's already active only refreshes

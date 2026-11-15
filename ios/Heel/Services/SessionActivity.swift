@@ -20,17 +20,18 @@ final class ActivityKitSessionActivity: SessionActivity {
     private static let staleAfter: TimeInterval = 10 * 60
     private static let refreshEvery: TimeInterval = 4 * 60
 
+    /// One controller for the whole app: every new one clears the activities that exist.
+    static let shared = ActivityKitSessionActivity()
+
     private var activity: Activity<SessionActivityAttributes>?
+    private(set) var lastError: String?
     private var shown: SessionPhase?
     private var refresh: Timer?
 
     init() {
         // An activity left behind by a previous launch describes a session that no longer exists.
-        Task {
-            for old in Activity<SessionActivityAttributes>.activities {
-                await old.end(nil, dismissalPolicy: .immediate)
-            }
-        }
+        let old = Activity<SessionActivityAttributes>.activities
+        Task { for activity in old { await activity.end(nil, dismissalPolicy: .immediate) } }
     }
 
     func show(_ phase: SessionPhase?) {
@@ -57,18 +58,30 @@ final class ActivityKitSessionActivity: SessionActivity {
             Task { await activity.update(content) }
         } else if ActivityAuthorizationInfo().areActivitiesEnabled {
             // Requested while the app is in front: ActivityKit refuses to start one from the background.
-            activity = try? Activity.request(attributes: SessionActivityAttributes(), content: content, pushType: nil)
+            do {
+                activity = try Activity.request(attributes: SessionActivityAttributes(), content: content, pushType: nil)
+                lastError = nil
+            } catch {
+                lastError = String(describing: error)
+            }
         }
     }
 
 #if DEBUG
     /// Lets a developer see every layout without pairing two phones. `staleAfter` makes the
     /// "Open Heel to check in" fallback appear after that many seconds.
-    func preview(_ phase: SessionPhase?, staleAfter: TimeInterval = ActivityKitSessionActivity.staleAfter) {
+    /// Returns what happened, so the panel can say so instead of silently doing nothing.
+    func preview(_ phase: SessionPhase?, staleAfter: TimeInterval = ActivityKitSessionActivity.staleAfter) -> String {
         refresh?.invalidate()
         refresh = nil
         shown = phase
-        if let phase { push(phase, staleAfter: staleAfter) } else { end() }
+        guard let phase else { end(); return "Ended" }
+        push(phase, staleAfter: staleAfter)
+        if activity != nil { return "Showing \(phase.rawValue). Lock the phone or leave Heel to see it." }
+        if !ActivityAuthorizationInfo().areActivitiesEnabled {
+            return "Live Activities are turned off for Heel (iOS Settings › Heel › Live Activities)."
+        }
+        return "ActivityKit refused the request: \(lastError ?? "unknown")"
     }
 #endif
 
