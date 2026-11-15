@@ -132,12 +132,12 @@ final class PairingViewModel: NSObject, ObservableObject {
 }
 
 extension PairingViewModel: RelayListener {
-    nonisolated func relayConnectionChanged(connected: Bool, reason: String) {
-        Task { @MainActor in self.connectionReason = reason }
+    func relayConnectionChanged(connected: Bool, reason: String) {
+        connectionReason = reason
     }
 
-    nonisolated func relayReceived(_ message: JSONDictionary) {
-        Task { @MainActor in self.handle(message) }
+    func relayReceived(_ message: JSONDictionary) {
+        handle(message)
     }
 
     private func handle(_ message: JSONDictionary) {
