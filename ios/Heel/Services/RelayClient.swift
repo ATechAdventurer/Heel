@@ -162,6 +162,11 @@ final class RelayClient: NSObject {
         let existingToken: String?
         do {
             existingToken = try store.token()
+        } catch CredentialStore.CredentialStoreError.locked {
+            // Not a broken identity: the phone is locked. Try again shortly.
+            report(false, "Unlock your phone to connect.")
+            retry()
+            return
         } catch {
             report(false, "Phone identity unavailable. Use relay settings to reset this phone.")
             return
