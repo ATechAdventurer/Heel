@@ -51,7 +51,10 @@ final class RelayClient: NSObject {
     private var socketTask: URLSessionWebSocketTask?
     private var taskGeneration: [ObjectIdentifier: Int] = [:]
     private var registrationTask: URLSessionDataTask?
-    private var generation = 0
+    private(set) var generation = 0
+    /// The relay speaks first (its `state`), and that can reach the main thread before the
+    /// socket's open callback does. Hold it until the connection is reported, then replay in order.
+    private var early: [(text: String, receivedAt: TimeInterval)] = []
     private(set) var connected = false
     private var lastLease: TimeInterval = 0
     private var lastFrame: TimeInterval = 0
@@ -254,8 +257,12 @@ final class RelayClient: NSObject {
         receiveLoop(task: task, generation: current)
     }
 
-    private func handleMessage(text: String, receivedAt: TimeInterval, generation current: Int) {
-        guard current == generation, connected else { return }
+    func handleMessage(text: String, receivedAt: TimeInterval, generation current: Int) {
+        guard current == generation else { return }
+        guard connected else {
+            if early.count < 16 { early.append((text, receivedAt)) }
+            return
+        }
         guard let data = text.data(using: .utf8),
               let message = try? JSONSerialization.jsonObject(with: data) as? JSONDictionary,
               !message.optString("type").isEmpty
@@ -285,6 +292,18 @@ final class RelayClient: NSObject {
         }
         controller?.relayReceived(message)
         listener?.relayReceived(message)
+    }
+
+    /// The socket is open: report it, then handle anything the relay sent before we knew.
+    func socketOpened(generation current: Int) {
+        lastLease = ProcessInfo.processInfo.systemUptime
+        reconnectWorkItem?.cancel()
+        report(true, "Connected")
+        if let stop = pendingStop { _ = send(Self.json(stop)) }
+        startHeartbeat()
+        let queued = early
+        early = []
+        for message in queued { handleMessage(text: message.text, receivedAt: message.receivedAt, generation: current) }
     }
 
     private func startHeartbeat() {
@@ -382,6 +401,7 @@ final class RelayClient: NSObject {
             task.cancel(with: .goingAway, reason: nil)
         }
         socketTask = nil
+        early = []
         report(false, reason)
         retry()
     }
@@ -409,11 +429,7 @@ extension RelayClient: URLSessionWebSocketDelegate {
                 webSocketTask.cancel()
                 return
             }
-            self.lastLease = ProcessInfo.processInfo.systemUptime
-            self.reconnectWorkItem?.cancel()
-            self.report(true, "Connected")
-            if let stop = self.pendingStop { _ = self.send(Self.json(stop)) }
-            self.startHeartbeat()
+            self.socketOpened(generation: current)
         }
     }
 
