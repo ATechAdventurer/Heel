@@ -9,10 +9,13 @@ final class CredentialStore {
     enum CredentialStoreError: Error, LocalizedError {
         case saveFailed(OSStatus)
         case readFailed(OSStatus)
+        /// The device is locked and the item isn't readable yet. The identity is fine.
+        case locked
 
         var errorDescription: String? {
             switch self {
             case .saveFailed, .readFailed: return "Could not save this phone's pairing identity."
+            case .locked: return "Unlock your phone to connect."
             }
         }
     }
@@ -34,8 +37,9 @@ final class CredentialStore {
         try? deleteToken()
     }
 
+    /// A locked phone still has its identity; only a missing or unreadable item counts as none.
     var hasToken: Bool {
-        (try? token()) != nil
+        do { return try token() != nil } catch CredentialStoreError.locked { return true } catch { return false }
     }
 
     func token() throws -> String? {
@@ -46,9 +50,11 @@ final class CredentialStore {
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
+        if status == errSecInteractionNotAllowed { throw CredentialStoreError.locked }
         guard status == errSecSuccess, let data = result as? Data,
               let token = String(data: data, encoding: .utf8)
         else { throw CredentialStoreError.readFailed(status) }
+        relaxAccessibility()
         return token
     }
 
@@ -57,7 +63,7 @@ final class CredentialStore {
         try deleteToken()
         var attributes = baseQuery
         attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        attributes[kSecAttrAccessible as String] = Self.accessibility
         let status = SecItemAdd(attributes as CFDictionary, nil)
         guard status == errSecSuccess else { throw CredentialStoreError.saveFailed(status) }
     }
@@ -67,6 +73,15 @@ final class CredentialStore {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw CredentialStoreError.saveFailed(status)
         }
+    }
+
+    /// Readable after the first unlock since boot, so a session that wakes while the phone is
+    /// locked can still reconnect. Still this-device-only: it never leaves the phone.
+    static let accessibility = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+    /// Tokens saved by earlier builds were only readable while unlocked; move them over.
+    private func relaxAccessibility() {
+        SecItemUpdate(baseQuery as CFDictionary, [kSecAttrAccessible as String: Self.accessibility] as CFDictionary)
     }
 
     private var baseQuery: [String: Any] {

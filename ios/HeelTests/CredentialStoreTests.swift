@@ -41,4 +41,37 @@ final class CredentialStoreTests: XCTestCase {
         XCTAssertFalse(store.hasToken)
         XCTAssertEqual(store.endpoint, "https://relay.example.com")
     }
+
+    private func storedAccessibility() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "dev.atechadventure.heel.relay",
+            kSecAttrAccount as String: "token",
+            kSecReturnAttributes as String: true,
+        ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let attributes = result as? [String: Any] else { return nil }
+        return attributes[kSecAttrAccessible as String] as? String
+    }
+
+    func testTokenIsReadableAfterFirstUnlockSoALockedPhoneCanReconnect() throws {
+        try freshStore().setToken("secret-token")
+        XCTAssertEqual(storedAccessibility(), kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+    }
+
+    func testATokenSavedWhileUnlockedOnlyIsMovedOverWhenRead() throws {
+        let store = freshStore()
+        try store.setToken("secret-token")
+        let base: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "dev.atechadventure.heel.relay",
+            kSecAttrAccount as String: "token",
+        ]
+        XCTAssertEqual(SecItemUpdate(base as CFDictionary,
+            [kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly] as CFDictionary), errSecSuccess)
+        XCTAssertEqual(storedAccessibility(), kSecAttrAccessibleWhenUnlockedThisDeviceOnly as String)
+        XCTAssertEqual(try store.token(), "secret-token")
+        XCTAssertEqual(storedAccessibility(), kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String)
+    }
 }
