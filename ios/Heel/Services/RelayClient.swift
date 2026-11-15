@@ -1,5 +1,7 @@
 import Foundation
 
+/// Always called on the main actor, in the order the relay sent things.
+@MainActor
 protocol RelayListener: AnyObject {
     func relayReceived(_ message: JSONDictionary)
     func relayConnectionChanged(connected: Bool, reason: String)
