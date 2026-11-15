@@ -128,11 +128,11 @@ final class SpellBookTests: XCTestCase {
         XCTAssertFalse(recording.hasMovement())
     }
 
-    func testSaveAndDeleteRoundTripThroughUserDefaults() throws {
+    func testSaveAndDeleteRoundTrip() throws {
         let suiteName = "SpellBookTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let book = SpellBook(defaults: defaults)
+        let book = SpellBook.temporary(defaults: defaults)
 
         XCTAssertEqual(book.all().count, 0)
         let spell = try validSpell()
@@ -147,7 +147,7 @@ final class SpellBookTests: XCTestCase {
         let suiteName = "SpellBookTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let book = SpellBook(defaults: defaults)
+        let book = SpellBook.temporary(defaults: defaults)
         for i in 0..<SpellBook.maxSpells {
             try book.save(try SpellBook.Spell(
                 id: "s-\(i)", name: "n", sticker: 0, channels: 1, duration: 10,
@@ -157,5 +157,51 @@ final class SpellBookTests: XCTestCase {
         XCTAssertThrowsError(try book.save(try validSpell())) { error in
             XCTAssertEqual(error as? SpellBook.SpellBookError, .spellbookFull)
         }
+    }
+
+    private func storage() -> (defaults: UserDefaults, directory: URL) {
+        let suiteName = "SpellBookTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpellBookTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return (defaults, directory)
+    }
+
+    func testRecordingsAreStoredInAFileKeptOutOfBackups() throws {
+        let (defaults, directory) = storage()
+        let book = SpellBook(defaults: defaults, directory: directory)
+        try book.save(try validSpell())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("spells.json").path))
+        XCTAssertNil(defaults.data(forKey: "spells"), "Recordings no longer go through UserDefaults")
+        let values = try directory.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(values.isExcludedFromBackup, true)
+        XCTAssertEqual(SpellBook(defaults: defaults, directory: directory).all().count, 1, "A new instance reads the same file")
+    }
+
+    func testRecordingsFromUserDefaultsAreMovedToTheFile() throws {
+        let (defaults, directory) = storage()
+        let legacy = try JSONEncoder().encode([try validSpell()])
+        defaults.set(legacy, forKey: "spells")
+        let book = SpellBook(defaults: defaults, directory: directory)
+        XCTAssertEqual(book.all().map(\.id), ["spell-1"])
+        XCTAssertNil(defaults.data(forKey: "spells"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.appendingPathComponent("spells.json").path))
+        XCTAssertEqual(book.all().map(\.id), ["spell-1"], "Still there once read from the file")
+    }
+
+    func testTheOldCopyIsKeptWhenTheFileCannotBeWritten() throws {
+        let (defaults, directory) = storage()
+        // A file where the folder should be, so the folder can't be created.
+        try Data().write(to: directory)
+        let legacy = try JSONEncoder().encode([try validSpell()])
+        defaults.set(legacy, forKey: "spells")
+        let book = SpellBook(defaults: defaults, directory: directory)
+        XCTAssertEqual(book.all().count, 1)
+        XCTAssertNotNil(defaults.data(forKey: "spells"), "Nothing is lost if the move fails")
+        XCTAssertThrowsError(try book.save(try SpellBook.Spell(
+            id: "s2", name: "n", sticker: 0, channels: 1, duration: 10,
+            frames: [SpellBook.Frame(time: 0, values: [0], touching: 0), SpellBook.Frame(time: 10, values: [0], touching: 0)])))
     }
 }

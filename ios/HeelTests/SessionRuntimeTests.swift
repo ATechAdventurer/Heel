@@ -25,7 +25,7 @@ final class SessionRuntimeTests: XCTestCase {
         self.activity = activity
         runtime = SessionRuntime(
             owner: { ControlViewModel(relay: relay, haptics: OwnerHaptics(output: NullHapticsOutput()),
-                                      spellbook: SpellBook(defaults: defaults), schedule: { _, _ in }) },
+                                      spellbook: SpellBook.temporary(defaults: defaults), schedule: { _, _ in }) },
             pet: { PetControlViewModel(relay: relay, engine: engine, defaults: defaults, schedule: scheduler.schedule) },
             screen: screen, activity: activity)
     }

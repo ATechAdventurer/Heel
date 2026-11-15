@@ -94,3 +94,12 @@ final class FakeActivity: SessionActivity {
 
     func show(_ phase: SessionPhase?) { shown.append(phase) }
 }
+
+
+extension SpellBook {
+    /// A Spellbook that writes to its own temporary folder, never the app's real one.
+    static func temporary(defaults: UserDefaults) -> SpellBook {
+        SpellBook(defaults: defaults, directory: FileManager.default.temporaryDirectory
+            .appendingPathComponent("SpellBookTests-\(UUID().uuidString)", isDirectory: true))
+    }
+}

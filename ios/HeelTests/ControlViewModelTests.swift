@@ -12,7 +12,7 @@ final class ControlViewModelTests: XCTestCase {
         relay = FakeRelay()
         defaults = UserDefaults(suiteName: "ControlViewModelTests.\(UUID().uuidString)")
         model = ControlViewModel(relay: relay, haptics: OwnerHaptics(output: NullHapticsOutput()),
-                                 spellbook: SpellBook(defaults: defaults), schedule: { _, _ in })
+                                 spellbook: SpellBook.temporary(defaults: defaults), schedule: { _, _ in })
     }
 
     private func ownerState(_ epoch: String, ready: Bool = false, active: Bool = false,
@@ -217,7 +217,7 @@ final class ControlViewModelTests: XCTestCase {
 
         relay.frames = []
         model = ControlViewModel(relay: relay, haptics: OwnerHaptics(output: NullHapticsOutput()),
-                                 spellbook: SpellBook(defaults: defaults), schedule: { _, _ in })
+                                 spellbook: SpellBook.temporary(defaults: defaults), schedule: { _, _ in })
         model.setSliderMode(true)
         startSession()
         model.relayReceived(resumedWithHold())
