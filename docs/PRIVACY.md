@@ -14,6 +14,8 @@ The Android app stores role/settings, paired-session state and local recordings.
 
 The iOS app stores role/settings, the Pet's Safe Word latch, local Spellbook recordings and the relay address in the app's own storage, and its relay token in the Keychain. The token is marked this-device-only, so it does not sync through iCloud Keychain and cannot be restored onto a different phone. Unlike Android, app backup is not disabled: iOS backups can include the stored role, settings, recordings and relay address. The Pet's iPhone keeps the chosen device's Bluetooth identity locally so it can find the same device again after a drop; it is not sent to the relay. The app asks only for Bluetooth permission (no location, contacts, photos or microphone), declares no tracking in its privacy manifest, and has no debug log or diagnostics export yet.
 
+While a session is live, the iOS app shows a Live Activity on the Lock Screen and Dynamic Island that says only "Together", "Paused" or "Waiting". It carries no names, device or levels, but anyone who can see the phone can see it. It can be turned off per app in iOS Settings, and it is updated only on the phone (nothing is sent to a server for it).
+
 ## Deletion and access
 
 Unpairing removes the pair relationship, not the enrolled phone identities. Clearing app data or uninstalling removes the phone's local data but does not delete its old identity from the server. A host can stop the relay and delete its private state to reset the entire server, which invalidates all enrolled identities and requires everyone to enroll/pair again. There is no per-phone admin deletion UI in this beta. Hosts control their backups and retention.
