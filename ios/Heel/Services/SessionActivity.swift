@@ -25,6 +25,8 @@ final class ActivityKitSessionActivity: SessionActivity {
 
     private var activity: Activity<SessionActivityAttributes>?
     private(set) var lastError: String?
+    /// A debug preview isn't a session, so the runtime's "no session" refreshes must not end it.
+    private var previewing = false
     private var shown: SessionPhase?
     private var refresh: Timer?
 
@@ -35,7 +37,7 @@ final class ActivityKitSessionActivity: SessionActivity {
     }
 
     func show(_ phase: SessionPhase?) {
-        guard phase != shown else { return }
+        guard !previewing, phase != shown else { return }
         shown = phase
         guard let phase else {
             refresh?.invalidate()
@@ -75,6 +77,7 @@ final class ActivityKitSessionActivity: SessionActivity {
         refresh?.invalidate()
         refresh = nil
         shown = phase
+        previewing = phase != nil
         guard let phase else { end(); return "Ended" }
         push(phase, staleAfter: staleAfter)
         if activity != nil { return "Showing \(phase.rawValue). Lock the phone or leave Heel to see it." }
