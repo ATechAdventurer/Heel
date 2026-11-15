@@ -50,9 +50,9 @@ final class ActivityKitSessionActivity: SessionActivity {
         }
     }
 
-    private func push(_ phase: SessionPhase) {
+    private func push(_ phase: SessionPhase, staleAfter: TimeInterval = ActivityKitSessionActivity.staleAfter) {
         let content = ActivityContent(state: SessionActivityAttributes.ContentState(phase: phase),
-                                      staleDate: Date().addingTimeInterval(Self.staleAfter))
+                                      staleDate: Date().addingTimeInterval(staleAfter))
         if let activity {
             Task { await activity.update(content) }
         } else if ActivityAuthorizationInfo().areActivitiesEnabled {
@@ -60,6 +60,17 @@ final class ActivityKitSessionActivity: SessionActivity {
             activity = try? Activity.request(attributes: SessionActivityAttributes(), content: content, pushType: nil)
         }
     }
+
+#if DEBUG
+    /// Lets a developer see every layout without pairing two phones. `staleAfter` makes the
+    /// "Open Heel to check in" fallback appear after that many seconds.
+    func preview(_ phase: SessionPhase?, staleAfter: TimeInterval = ActivityKitSessionActivity.staleAfter) {
+        refresh?.invalidate()
+        refresh = nil
+        shown = phase
+        if let phase { push(phase, staleAfter: staleAfter) } else { end() }
+    }
+#endif
 
     private func end() {
         guard let activity else { return }
