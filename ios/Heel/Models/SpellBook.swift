@@ -164,13 +164,22 @@ final class SpellBook {
 
     private let defaults: UserDefaults
     private let storageKey = "spells"
+    private let file: URL
 
-    init(defaults: UserDefaults = .standard) {
+    /// Recordings are up to megabytes, so they live in a file rather than UserDefaults (which is
+    /// read in full at every launch), and stay out of iCloud and device backups like Android's.
+    static var defaultDirectory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Heel", isDirectory: true)
+    }
+
+    init(defaults: UserDefaults = .standard, directory: URL = SpellBook.defaultDirectory) {
         self.defaults = defaults
+        file = directory.appendingPathComponent("spells.json")
     }
 
     func all() -> [Spell] {
-        guard let data = defaults.data(forKey: storageKey), data.count <= 16_000_000,
+        guard let data = load(), data.count <= 16_000_000,
               let raw = try? JSONDecoder().decode([FailableSpell].self, from: data)
         else { return [] }
         return raw.compactMap(\.spell).prefix(Self.maxSpells).map { $0 }
@@ -190,8 +199,27 @@ final class SpellBook {
     }
 
     private func write(_ spells: [Spell]) throws {
-        guard let data = try? JSONEncoder().encode(spells) else { throw SpellBookError.saveFailed }
-        defaults.set(data, forKey: storageKey)
+        guard let data = try? JSONEncoder().encode(spells), (try? store(data)) != nil
+        else { throw SpellBookError.saveFailed }
+    }
+
+    private func load() -> Data? {
+        if let data = try? Data(contentsOf: file) { return data }
+        // Earlier builds kept the recordings in UserDefaults. Move them, and only forget the old
+        // copy once the file is safely written.
+        guard let legacy = defaults.data(forKey: storageKey) else { return nil }
+        if (try? store(legacy)) != nil { defaults.removeObject(forKey: storageKey) }
+        return legacy
+    }
+
+    private func store(_ data: Data) throws {
+        var directory = file.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Set on the folder: an atomic write replaces the file, but the folder's exclusion stays.
+        var excluded = URLResourceValues()
+        excluded.isExcludedFromBackup = true
+        try directory.setResourceValues(excluded)
+        try data.write(to: file, options: [.atomic, .completeFileProtection])
     }
 }
 
