@@ -298,6 +298,13 @@ final class ControlViewModel: NSObject, ObservableObject, RelayListener {
     /// Unlike Android's wake lock this ignores a merely resumable session: that clause exists to
     /// reconnect in the background, which iOS can't do, and here it would pin the screen on forever
     /// after a pause.
+    /// What the Lock Screen activity says; nil while there is no session worth showing.
+    var activityPhase: SessionPhase? {
+        if gate.active() { return .together }
+        if relayState.optBool("paused") { return .paused }
+        return keepsScreenAwake ? .waiting : nil
+    }
+
     var keepsScreenAwake: Bool {
         relayOnline && (gate.active() || gate.pending() || relayState.optBool("ready"))
     }
